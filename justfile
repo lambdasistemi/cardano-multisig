@@ -30,6 +30,12 @@ hlint:
     set -euo pipefail
     find . -name '*.hs' -not -path './dist-newstyle/*' -not -path './.direnv/*' | xargs hlint
 
+# Check cabal package metadata
+cabal-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cabal check --ignore=missing-upper-bounds --ignore=no-modules-exposed --ignore=option-o2
+
 # Build all components
 build:
     #!/usr/bin/env bash

@@ -55,7 +55,7 @@ jobs:
           name: paolino
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - name: Build in dev shell
-        run: nix --quiet develop --accept-flake-config -c cabal build all -O0
+        run: nix --quiet develop -c just cabal-check
 
   formatting:
     name: Formatting

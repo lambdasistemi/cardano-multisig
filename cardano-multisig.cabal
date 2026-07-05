@@ -17,7 +17,9 @@ copyright:       2026 lambdasistemi
 category:        Network
 stability:       experimental
 build-type:      Simple
-extra-doc-files: README.md
+extra-doc-files:
+  CHANGELOG.md
+  README.md
 
 flag werror
   description: Enable -Werror (used by nix builds and CI)
