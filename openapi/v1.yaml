@@ -1,0 +1,514 @@
+openapi: 3.1.0
+info:
+  title: cardano-multisig
+  version: "1.0.0"
+  summary: Permissionless witness-collection coordinator for Conway transactions.
+  description: |
+    The wire contract of record for a `cardano-multisig` operator (constitution,
+    *Technology & Interface Constraints*). Every operator in the federation
+    implements this contract; clients treat operators as interchangeable
+    (Operator market & federation).
+
+    ## Authorization model (Principle I)
+
+    There is no session, cookie, account, or login. Every state-changing call
+    carries its own proof **in the request payload** — the standard HTTP/cookie
+    auth schemes do not apply, so no `securitySchemes` are declared. The proof
+    per action:
+
+    | Action            | Proof carried                                              |
+    |-------------------|-----------------------------------------------------------|
+    | Publish           | **fee** — a confirmed, tagged on-chain payment            |
+    | Add witness       | **the witness itself** — Ed25519 over the body hash       |
+    | Set filter policy | **signature** by the signer's key                         |
+    | Submit            | **none** — a complete tx is broadcastable by anyone       |
+    | All reads         | none                                                      |
+
+    CORS is credential-free: authorization is in the body, never in cookies.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+
+servers:
+  - url: https://{host}/v1
+    variables:
+      host:
+        default: multisig.example
+        description: Any operator in the federation.
+
+paths:
+  /operator:
+    get:
+      operationId: getOperator
+      summary: Operator discovery and fee schedule.
+      description: |
+        Advertises the operator's network, fee schedule, and TTL horizon.
+        Pricing is operator-set (Economic model); a client uses the schedule
+        to compute the validity-weighted fee, or calls `/fee-quote`.
+      responses:
+        "200":
+          description: Operator metadata.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorInfo" }
+
+  /fee-quote:
+    post:
+      operationId: quoteFee
+      summary: Quote the exact validity-weighted fee for a transaction.
+      description: |
+        Convenience so the proposer pays the exact amount. Returns the fee
+        address and the required tag (the body hash). No auth. Enforces the
+        validity-weighted fee (Economic model).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeeQuoteRequest" }
+      responses:
+        "200":
+          description: Fee quote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeeQuote" }
+        "422":
+          description: Undecodable tx, or `invalidHereafter` absent / unbounded / beyond horizon.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /entries:
+    post:
+      operationId: publishEntry
+      summary: Publish an unsigned transaction (auth&#58; fee).
+      description: |
+        Admits an entry to the queue. Open to any proposer — the publisher
+        need not be a required-signer (Principle I). The service derives the
+        body hash, runs a live phase-1 pre-flight (Principle V), requires a
+        bounded `invalidHereafter` within the horizon (Principle V), and
+        verifies the `fee_payment` is on-chain, pays the fee address, is
+        tagged with the body hash, is confirmed, and covers
+        `base + rate * (invalidHereafter - tip)` (Economic model).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublishRequest" }
+      responses:
+        "201":
+          description: Entry admitted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entry" }
+        "402":
+          description: Fee missing, unconfirmed, or insufficient.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Duplicate entry (body hash already queued).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Phase-1 pre-flight failed, or TTL unbounded / over horizon.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      operationId: listEntries
+      summary: "\"What must I sign?\" — filtered entry query."
+      description: |
+        The signer-controlled, default-deny inbox (Principle III). `signer`
+        scopes to entries whose roster includes that key; `predicate` selects
+        the filter. Public read; the filter is the signer's own choice.
+      parameters:
+        - name: signer
+          in: query
+          required: true
+          description: Verification-key hash the query is scoped to.
+          schema: { $ref: "#/components/schemas/VKeyHash" }
+        - name: predicate
+          in: query
+          required: true
+          description: |
+            `trust-ordered` — surface only entries already witnessed by a
+            co-signer in `allowlist` (canonical, default-deny). `roster-open`
+            — the bootstrap predicate: surface entries where `signer` is on the
+            roster regardless of existing witnesses (for first-movers).
+          schema:
+            type: string
+            enum: [trust-ordered, roster-open]
+        - name: allowlist
+          in: query
+          required: false
+          description: Comma-separated trusted co-signer key hashes (for `trust-ordered`).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching entry summaries.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntryList" }
+        "422":
+          description: Missing or malformed filter.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /entries/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Entry id — the transaction body hash (blake2b-256).
+        schema: { $ref: "#/components/schemas/BodyHash" }
+    get:
+      operationId: getEntry
+      summary: Read one entry (public).
+      responses:
+        "200":
+          description: Entry detail.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entry" }
+        "404":
+          description: No such entry (never existed, or expired and swept).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /entries/{id}/witnesses:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/BodyHash" }
+    post:
+      operationId: addWitness
+      summary: Add a witness (auth&#58; the witness itself).
+      description: |
+        Self-securing (Principle I). Verified: signature valid over the body
+        hash; key in `required_signers`; not already present. A valid witness
+        needs no other credential; an invalid or non-required witness is
+        rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WitnessRequest" }
+      responses:
+        "200":
+          description: Updated witness set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WitnessResult" }
+        "404":
+          description: Entry expired or absent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Duplicate witness.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Invalid signature or non-required key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /entries/{id}/submit:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/BodyHash" }
+    post:
+      operationId: submitEntry
+      summary: Assemble and broadcast a fully-witnessed entry (no auth).
+      description: |
+        Submission authorization is deferred (Milestones); a fully-witnessed
+        transaction is broadcastable by anyone. Assembles, broadcasts, and
+        persists a receipt.
+      responses:
+        "200":
+          description: Submitted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "409":
+          description: Not fully witnessed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Phase-1 now fails, or entry expired.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /entries/{id}/receipt:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/BodyHash" }
+    get:
+      operationId: getReceipt
+      summary: The persisted submission receipt.
+      responses:
+        "200":
+          description: Receipt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "404":
+          description: Not submitted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /signers/{vkeyhash}/filter:
+    parameters:
+      - name: vkeyhash
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/VKeyHash" }
+    put:
+      operationId: setFilterPolicy
+      summary: Store a signer's filter policy (auth&#58; signature).
+      description: |
+        Stores the signer's default open-to-sign predicate (Principle III),
+        so `GET /entries?signer=…` applies it without re-specifying. Scoped to
+        a key and authorized by that key's signature; nobody can set another
+        key's policy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FilterPolicyRequest" }
+      responses:
+        "204":
+          description: Policy stored.
+        "401":
+          description: Missing or invalid signature for this key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  schemas:
+    Lovelace:
+      type: integer
+      format: int64
+      minimum: 0
+      description: An amount in lovelace (1 ADA = 1_000_000 lovelace).
+    Slot:
+      type: integer
+      format: int64
+      minimum: 0
+      description: An absolute slot number.
+    BodyHash:
+      type: string
+      pattern: "^[0-9a-f]{64}$"
+      description: Transaction body hash, blake2b-256, lowercase hex. Also the txid once submitted.
+    VKeyHash:
+      type: string
+      pattern: "^[0-9a-f]{56}$"
+      description: Ed25519 verification-key hash, blake2b-224, lowercase hex.
+    CborHex:
+      type: string
+      pattern: "^[0-9a-f]+$"
+      description: CBOR-encoded bytes as lowercase hex.
+    Bech32Address:
+      type: string
+      description: A Cardano address in bech32.
+    TxIn:
+      type: string
+      pattern: "^[0-9a-f]{64}#[0-9]+$"
+      description: A transaction output reference, `txid#index`.
+    Status:
+      type: string
+      enum: [collecting, ready, submitted, expired]
+
+    FeeSchedule:
+      type: object
+      required: [base_lovelace, rate_lovelace_per_slot, address, tag_field]
+      properties:
+        base_lovelace:
+          $ref: "#/components/schemas/Lovelace"
+        rate_lovelace_per_slot:
+          $ref: "#/components/schemas/Lovelace"
+        address:
+          $ref: "#/components/schemas/Bech32Address"
+        tag_field:
+          type: string
+          description: How the body hash is carried on the payment (e.g. a datum/metadata convention).
+      description: "Fee = base_lovelace + rate_lovelace_per_slot * (invalidHereafter - tip)."
+
+    OperatorInfo:
+      type: object
+      required: [network, fee, ttl_horizon_slots, roster_types]
+      properties:
+        network:
+          type: string
+          enum: [mainnet, preprod, preview]
+        fee:
+          $ref: "#/components/schemas/FeeSchedule"
+        ttl_horizon_slots:
+          $ref: "#/components/schemas/Slot"
+        roster_types:
+          type: array
+          items:
+            type: string
+            enum: [required_signers]
+
+    FeeQuoteRequest:
+      type: object
+      required: [transaction]
+      properties:
+        transaction:
+          $ref: "#/components/schemas/CborHex"
+
+    FeeQuote:
+      type: object
+      required: [body_hash, required_fee_lovelace, fee_address, tag, invalid_hereafter]
+      properties:
+        body_hash:
+          $ref: "#/components/schemas/BodyHash"
+        required_fee_lovelace:
+          $ref: "#/components/schemas/Lovelace"
+        fee_address:
+          $ref: "#/components/schemas/Bech32Address"
+        tag:
+          $ref: "#/components/schemas/BodyHash"
+        invalid_hereafter:
+          $ref: "#/components/schemas/Slot"
+
+    PublishRequest:
+      type: object
+      required: [transaction, fee_payment]
+      properties:
+        transaction:
+          $ref: "#/components/schemas/CborHex"
+        fee_payment:
+          $ref: "#/components/schemas/TxIn"
+
+    Liveness:
+      type: object
+      required: [inputs_unspent, phase1_ok]
+      properties:
+        inputs_unspent:
+          type: boolean
+        phase1_ok:
+          type: boolean
+
+    Entry:
+      type: object
+      required: [entry_id, required_signers, witnesses, missing, invalid_hereafter, status]
+      properties:
+        entry_id:
+          $ref: "#/components/schemas/BodyHash"
+        transaction:
+          $ref: "#/components/schemas/CborHex"
+        required_signers:
+          type: array
+          items: { $ref: "#/components/schemas/VKeyHash" }
+        witnesses:
+          type: array
+          items: { $ref: "#/components/schemas/VKeyHash" }
+        missing:
+          type: array
+          items: { $ref: "#/components/schemas/VKeyHash" }
+        liveness:
+          $ref: "#/components/schemas/Liveness"
+        invalid_hereafter:
+          $ref: "#/components/schemas/Slot"
+        status:
+          $ref: "#/components/schemas/Status"
+
+    EntrySummary:
+      type: object
+      required: [entry_id, required_signers, witnesses, invalid_hereafter, status]
+      properties:
+        entry_id:
+          $ref: "#/components/schemas/BodyHash"
+        required_signers:
+          type: array
+          items: { $ref: "#/components/schemas/VKeyHash" }
+        witnesses:
+          type: array
+          items: { $ref: "#/components/schemas/VKeyHash" }
+        invalid_hereafter:
+          $ref: "#/components/schemas/Slot"
+        status:
+          $ref: "#/components/schemas/Status"
+
+    EntryList:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/EntrySummary" }
+
+    WitnessRequest:
+      type: object
+      required: [witness]
+      properties:
+        witness:
+          $ref: "#/components/schemas/CborHex"
+          description: A vkey witness (CBOR hex) — Ed25519 signature over the body hash plus its public key.
+
+    WitnessResult:
+      type: object
+      required: [witnesses, missing, status]
+      properties:
+        witnesses:
+          type: array
+          items: { $ref: "#/components/schemas/VKeyHash" }
+        missing:
+          type: array
+          items: { $ref: "#/components/schemas/VKeyHash" }
+        status:
+          $ref: "#/components/schemas/Status"
+
+    Receipt:
+      type: object
+      required: [tx_id, submitted_at]
+      properties:
+        tx_id:
+          $ref: "#/components/schemas/BodyHash"
+        submitted_at:
+          type: string
+          format: date-time
+
+    FilterPolicyRequest:
+      type: object
+      required: [predicate, signature]
+      properties:
+        predicate:
+          type: object
+          description: The signer's open-to-sign predicate (canonical encoding defined by the implementation).
+          additionalProperties: true
+        signature:
+          $ref: "#/components/schemas/CborHex"
+          description: Ed25519 signature by the path key over the canonical policy bytes.
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            detail:
+              description: Optional machine-readable context.
