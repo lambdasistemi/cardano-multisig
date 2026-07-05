@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  release-please:
+    runs-on: nixos
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          release-type: simple
+
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: nixos
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/cachix-action@v15
+        with:
+          name: paolino
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Build docker image
+        run: nix --quiet build .#docker-image -o cardano-multisig-image
+      - name: Push tagged image to ghcr
+        run: |
+          docker load < cardano-multisig-image
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          VERSION=$(nix --quiet eval --raw .#version)
+          IMAGE=ghcr.io/lambdasistemi/cardano-multisig
+          TAG="${{ needs.release-please.outputs.tag_name }}"
+          docker tag "${IMAGE}:${VERSION}" "${IMAGE}:${TAG}"
+          docker tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:latest"
+      - name: Attach image tarball to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          cp -L cardano-multisig-image "cardano-multisig-${TAG}-docker.tar.gz"
+          gh release upload "${TAG}" "cardano-multisig-${TAG}-docker.tar.gz"
