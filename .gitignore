@@ -1,0 +1,16 @@
+# Haskell / cabal
+dist-newstyle/
+.ghc.environment.*
+*.hi
+*.o
+cabal.project.local
+cabal.project.local~
+
+# Nix
+result
+result-*
+.direnv/
+
+# Editor / OS
+.DS_Store
+*.swp
