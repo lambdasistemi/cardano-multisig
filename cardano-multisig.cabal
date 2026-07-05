@@ -50,28 +50,40 @@ library
   exposed-modules:
     Cardano.Multisig.Chain
     Cardano.Multisig.Server
+    Cardano.Multisig.Store
+    Cardano.Multisig.Store.Codecs
+    Cardano.Multisig.Store.Columns
+    Cardano.Multisig.Store.RocksDB
     Cardano.Multisig.Version
 
   other-modules:   Paths_cardano_multisig
   autogen-modules: Paths_cardano_multisig
   build-depends:
-    , aeson                          <2.3
+    , aeson                                    <2.3
     , async
-    , base                           <5
+    , base                                     <5
+    , bytestring
     , cardano-ledger-api
+    , cardano-ledger-binary
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-node-clients
     , cardano-slotting
     , cardano-tx-tools
     , cardano-tx-tools:n2c-resolver
+    , cborg
     , containers
-    , http-types                     <0.13
+    , http-types                               <0.13
+    , lens
     , microlens
     , ouroboros-network:api
-    , wai                            <3.3
-    , wai-cors                       <0.3
-    , warp                           <3.5
+    , rocksdb-haskell-jprupp
+    , rocksdb-kv-transactions
+    , rocksdb-kv-transactions:kv-transactions
+    , time
+    , wai                                      <3.3
+    , wai-cors                                 <0.3
+    , warp                                     <3.5
 
 executable cardano-multisig-server
   import:         warnings, language
@@ -90,12 +102,15 @@ test-suite unit-tests
   other-modules:
     Cardano.Multisig.ChainSpec
     Cardano.Multisig.ServerSpec
+    Cardano.Multisig.StoreSpec
 
   build-depends:
-    , aeson                  <2.3
-    , base                   <5
+    , aeson                      <2.3
+    , async
+    , base                       <5
     , bytestring
     , cardano-crypto-class
+    , cardano-ledger-allegra
     , cardano-ledger-api
     , cardano-ledger-conway
     , cardano-ledger-core
@@ -103,7 +118,11 @@ test-suite unit-tests
     , cardano-multisig
     , cardano-node-clients
     , cardano-slotting
+    , cardano-tx-tools:tx-build
     , containers
-    , hspec                  <2.12
+    , hspec                      <2.12
+    , microlens
     , ouroboros-network:api
+    , temporary
     , text
+    , time

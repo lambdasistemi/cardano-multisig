@@ -10,6 +10,7 @@ module Main
 
 import Cardano.Multisig.ChainSpec qualified as ChainSpec
 import Cardano.Multisig.ServerSpec qualified as ServerSpec
+import Cardano.Multisig.StoreSpec qualified as StoreSpec
 import Test.Hspec (hspec)
 
 -- | Run the full unit-test suite.
@@ -17,3 +18,4 @@ main :: IO ()
 main = hspec $ do
     ServerSpec.spec
     ChainSpec.spec
+    StoreSpec.spec
