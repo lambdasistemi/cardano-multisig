@@ -1,16 +1,22 @@
 { indexState, pkgs, mkdocs, ... }:
 
 let
+  indexTool = { index-state = indexState; };
+  toolArgs = name:
+    indexTool // pkgs.lib.optionalAttrs (name == "cabal-fmt") {
+      cabalProjectLocal = ''
+        allow-newer: cabal-fmt:base
+      '';
+    };
+
   shell = { pkgs, ... }: {
     tools = {
-      cabal = { index-state = indexState; };
-      cabal-fmt = { index-state = indexState; };
-      haskell-language-server = { index-state = indexState; };
-      hoogle = { index-state = indexState; };
-      fourmolu = { index-state = indexState; };
-      hlint = { index-state = indexState; };
+      cabal = toolArgs "cabal";
+      cabal-fmt = toolArgs "cabal-fmt";
+      fourmolu = toolArgs "fourmolu";
+      hlint = toolArgs "hlint";
     };
-    withHoogle = true;
+    withHoogle = false;
     buildInputs = [
       pkgs.just
       pkgs.nixfmt-classic
