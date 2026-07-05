@@ -14,3 +14,12 @@ result-*
 # Editor / OS
 .DS_Store
 *.swp
+
+# Docs / scratch
+site/
+tmp/
+secrets/
+.cabal-fmt*
+**/*.bak
+WIP.md
+.llm/

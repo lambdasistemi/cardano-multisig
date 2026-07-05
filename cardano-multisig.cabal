@@ -1,0 +1,81 @@
+cabal-version:   3.4
+name:            cardano-multisig
+version:         0.1.0.0
+synopsis:        Permissionless witness coordinator for Conway transactions
+description:
+  A permissionless, stateful backend service that coordinates the
+  collection of witnesses over Conway transactions until they are fully
+  signed and can be submitted.
+
+homepage:        https://github.com/lambdasistemi/cardano-multisig
+bug-reports:     https://github.com/lambdasistemi/cardano-multisig/issues
+license:         Apache-2.0
+license-file:    LICENSE
+author:          Paolo Veronelli
+maintainer:      paolo.veronelli@gmail.com
+copyright:       2026 lambdasistemi
+category:        Network
+stability:       experimental
+build-type:      Simple
+extra-doc-files: README.md
+
+flag werror
+  description: Enable -Werror (used by nix builds and CI)
+  manual:      True
+  default:     False
+
+common warnings
+  ghc-options:
+    -Wall -Wunused-imports -Wunused-packages -Wmissing-export-lists
+    -Wname-shadowing -Wdeferred-out-of-scope-variables
+    -Wpartial-type-signatures -Wredundant-constraints
+
+  if flag(werror)
+    ghc-options: -Werror
+
+common language
+  default-language:   GHC2021
+  default-extensions:
+    DerivingStrategies
+    LambdaCase
+    OverloadedStrings
+    RecordWildCards
+    StrictData
+
+library
+  import:          warnings, language
+  hs-source-dirs:  src
+  exposed-modules:
+    Cardano.Multisig.Server
+    Cardano.Multisig.Version
+
+  other-modules:   Paths_cardano_multisig
+  autogen-modules: Paths_cardano_multisig
+  build-depends:
+    , aeson       <2.3
+    , base        <5
+    , http-types  <0.13
+    , wai         <3.3
+    , wai-cors    <0.3
+    , warp        <3.5
+
+executable cardano-multisig-server
+  import:         warnings, language
+  hs-source-dirs: app
+  main-is:        Main.hs
+  ghc-options:    -threaded -rtsopts
+  build-depends:
+    , base              <5
+    , cardano-multisig
+
+test-suite unit-tests
+  import:         warnings, language
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  other-modules:  Cardano.Multisig.ServerSpec
+  build-depends:
+    , aeson             <2.3
+    , base              <5
+    , cardano-multisig
+    , hspec             <2.12
