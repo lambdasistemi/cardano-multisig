@@ -3,30 +3,39 @@
 `cardano-multisig` is a permissionless, stateful **backend service** that
 coordinates the collection of witnesses over Conway transactions until they
 are fully signed and can be submitted. It is the extractable coordination
-core that consumers (e.g. `amaru-treasury-tx`) sit on top of. This document
-governs what the service is — and, as importantly, what it must never
-become.
+core that consumers (e.g. `amaru-treasury-tx`) sit on top of, and the
+interoperable standard that a federation of independent operators can
+implement. This document governs what the service is — and, as importantly,
+what it must never become.
 
 ## Core Principles
 
 ### I. Permissionless by signature — no accounts, ever
 
 The service has no user model, no login, no membership, and no admin role.
-Every state-changing request is authorized by an Ed25519 signature that the
-service **verifies but never holds**:
+Authorization is never an identity the service stores; it is a fact it
+checks per request:
 
-- **Publish** requires the unsigned transaction plus at least one witness
-  that verifies against the transaction body hash and whose key is in the
-  transaction's required-signer set.
+- **Publish** requires the unsigned transaction and a **proof of a paid,
+  non-refundable per-request fee** (see Economic model). The publisher need
+  not be a required-signer: they act as a **proposer / courier**, and a
+  valid proposal is one that is *paid for*, not one that is *enrolled*. A
+  malicious proposal is harmless — no signer signs a transaction they have
+  not verified, and no party can forge a witness.
 - **Adding a witness** is self-securing: an invalid or non-required witness
-  is rejected; a valid one needs no other credential.
-- **Retraction** and any **signer-scoped preference** (see Principle III)
-  require a signature by the relevant required-signer key.
+  is rejected; a valid required-signer witness needs no other credential.
+- **Signer-scoped preferences** (the filter policy of Principle III) require
+  a signature by the relevant required-signer key. Nobody can set another
+  signer's policy.
 
-There is no unauthenticated write and no privileged bypass. A request is
-authorized because it carries a signature the ledger itself would honour,
-or it is refused. Anyone who can reach the service can *read*; only a key
-holder can *change*.
+There is no unauthenticated privileged bypass and no stored balance:
+publishing is a paid, identity-free act; witnessing is authorized by a
+signature the ledger itself would honour; a signer's own policy is
+authorized by that signer's key. Anyone who can reach the service can
+*read*; changing an entry's fate requires paying for it, signing it, or
+owning the policy. A per-request toll creates no account, identity, or
+membership — it is pay-per-use and stateless, consistent with this
+principle.
 
 ### II. The transaction defines its own roster
 
@@ -38,36 +47,50 @@ as the authoritative roster. Later milestones MAY add roster providers
 but no roster source may ever require pre-registered participants — that is
 the membership model this project exists to avoid.
 
-### III. Anti-spam: co-signer-only reach, signer-controlled surface (NON-NEGOTIABLE)
+### III. Anti-spam: paid resources, signer-controlled surface (NON-NEGOTIABLE)
 
-A signer's attention is a protected resource. Two layers guard it, and both
-hold without accounts:
+Denial of service has two distinct surfaces, met by two distinct defences,
+and both hold without accounts:
 
-- **Reach is limited to co-signers.** Because publish requires a valid
-  required-signer witness, the only parties who can place an entry in front
-  of a given key are parties already holding a key in a required-signer set
-  shared with it — parties who could co-sign anyway. A stranger cannot
-  reach another signer's queue at all.
-- **The signer controls their own surface.** The "what must I sign?" query
-  MUST be filterable by criteria the signer defines, so that entries which
-  do not match a signer's declared *open-to-sign* predicate never surface
-  in that signer's inbox. Any stored filter policy is scoped to a key and
-  authorized by that key's signature; nobody can set another signer's
-  policy, and nothing can force an entry into a signer's attention.
+- **The service's own resources** — each publish costs a live phase-1
+  pre-flight, durable storage, and continuous liveness monitoring for the
+  entry's bounded lifetime — are protected by the **per-request fee** (see
+  Economic model). Because publishing is open to any proposer, the fee is
+  the sole gate on a public instance: a flood must pay per entry.
+- **A signer's attention** is protected **solely** by a **signer-controlled
+  filter**, and because the filter is an *allowlist* (default-deny) it
+  protects the inbox even against strangers. The "what must I sign?" query
+  MUST be filterable by criteria the signer defines; entries that do not
+  match a signer's declared *open-to-sign* predicate never surface. Any
+  stored filter policy is scoped to a key and authorized by that key's
+  signature.
 
   The canonical predicate is a **trust-ordered co-signer allowlist**: a
   signer surfaces an entry only once it *already carries a witness from a
-  co-signer on their allowlist* (e.g. "show me only entries already signed
-  by ktorz, damien, or pi"). This makes trust flow with signing order — a
-  rogue or compromised required-signer key can publish, but it never
-  reaches an honest signer's inbox until someone that signer trusts has
-  vouched by signing first.
+  co-signer on their allowlist* ("show me only entries already signed by
+  ktorz, damien, or pi"). This makes trust flow with signing order — a rogue
+  proposer or compromised key can publish, but the entry never reaches an
+  honest signer's inbox until someone that signer trusts has vouched by
+  signing first.
+
+  Because a proposer's entry may be **born with zero witnesses**, the
+  trust-ordered allowlist alone would hide every fresh entry from everyone
+  and stall the first signature. The filter is therefore the signer's *own*
+  policy, not one fixed rule: a first-mover opts into a **bootstrap
+  predicate** — e.g. "surface unsigned entries where I am on the roster" —
+  accepting more inbox noise in exchange for being able to start the witness
+  chain. The trust-ordered allowlist is the default, never the only,
+  predicate.
 
 Filters are a signer's own signed policy, never a membership roster or an
-account. The service MAY additionally bound resource use (per-publisher-key
-entry caps, bounded TTL per Principle V) to protect storage, but it MUST
-NOT protect a signer's inbox by gating *who* may publish beyond the
-required-signer witness rule.
+account. The service MAY bound resource use (bounded TTL per Principle V)
+but MUST NOT protect a signer's inbox by gating *who* may publish —
+publication is paid and open; attention is filtered.
+
+*(Amended in v2.0.0: earlier drafts limited publish to required-signers as
+an anti-spam reach limit. That pillar is removed — the fee protects
+resources, the default-deny filter protects attention, and publication is
+open to proposers.)*
 
 ### IV. Domain-agnostic core — extraction is the point (NON-NEGOTIABLE)
 
@@ -77,28 +100,39 @@ or validator-specific rules. The core knows only Conway transactions,
 signatures, time, and the chain. Consumers layer their domain on top as
 thin clients. Any PR that leaks a consumer's domain type into the core is
 rejected on sight; this is a hard review gate, not a stylistic preference.
+A domain-agnostic core is also what makes operators interchangeable — a
+commodity any operator can run (see Operator market & federation).
 
 ### V. Gated entry, self-cleaning queue
 
-An entry may enter the queue only if it could be submitted *right now* given
-a complete roster. Publish runs a live Conway phase-1 pre-flight against the
-node (all inputs resolve, the validity interval contains the current tip,
-value is conserved) and requires a **finite, bounded** `invalidHereafter`:
-no upper bound is rejected, and an expiry more than a configured horizon
-(default ~2 epochs / ~10 days) ahead of tip is rejected. A passed expiry
-removes the entry **automatically** — there is no manual delete endpoint.
-Everything that can rot after entry (spent inputs, elapsed TTL) is detected
+An entry may enter the queue only if it (a) could be submitted *right now*
+given a complete roster — a live Conway phase-1 pre-flight against the node
+(all inputs resolve, the validity interval contains the current tip, value
+is conserved) — (b) carries a **finite, bounded** `invalidHereafter` (no
+upper bound is rejected; an expiry more than a configured horizon, default
+~2 epochs / ~10 days, ahead of tip is rejected), and (c) carries a valid
+**proof of paid fee** (see Economic model). A passed expiry removes the
+entry **automatically** — there is no manual delete endpoint. Everything
+that can rot after entry (spent inputs, elapsed TTL) is detected
 continuously by the service, never discovered at submit time.
 
-### VI. Crypto is Haskell; the trust surface is minimal (NON-NEGOTIABLE)
+### VI. Crypto is Haskell; the trust surface is minimal; no on-chain code (NON-NEGOTIABLE)
 
 All cryptographic verification and ledger validation run as Haskell,
-reusing the phase-1 validator from
-[`cardano-tx-tools`](https://github.com/lambdasistemi/cardano-tx-tools) and
-the witness-verification path rather than reimplementing either. No
-cryptographic operation is delegated to a JavaScript dependency or an
-opaque third-party service. This is a fund-adjacent service: the dependency
-tree *is* the trust boundary, and it is kept deliberately small.
+reusing the phase-1 validator and witness-verification path from
+[`cardano-tx-tools`](https://github.com/lambdasistemi/cardano-tx-tools)
+rather than reimplementing either. No cryptographic operation is delegated
+to a JavaScript dependency or an opaque third-party service.
+
+Moreover, **the service requires zero on-chain validators.** There is no
+Plutus script, no minting policy, no custom on-chain code to deploy or
+audit. The fee is a bare payment tagged with the request body hash; the
+roster is the ledger's native `required_signers` field. This is a
+fund-adjacent service, and its trust boundary is therefore *exhaustively*
+the off-chain dependency tree, kept deliberately small. The zero-validator
+property is load-bearing and depends on the fee being **non-refundable**
+(see Economic model): any conditional refund, escrow, or proof-of-service
+obligation would reintroduce a validator and its audit surface.
 
 ### VII. Stateful backend, no frontend
 
@@ -109,46 +143,153 @@ contract-first HTTP API. The persistence backend is explicit and swappable
 behind an interface; state is never smuggled into client memory as the
 source of truth.
 
+Durability is scoped **deliberately to restart, not to an operator's
+disappearance.** An in-flight request holds no custody: its witnesses are
+re-signable and its unsigned transaction is re-publishable, so a vanished
+operator costs at most the *re-collection* of a request — never funds and
+never authority. For high-stakes requests, **multi-homing** (publishing to
+several operators at once, see Operator market & federation) removes even
+that cost. Durable off-operator request state — on-chain or replicated — is
+therefore **not** provided: it would reintroduce the very footprint this
+design eliminates, and re-collection plus multi-homing already cover the
+loss. This is a closed decision, not a deferral; revisiting it requires a
+concrete case where re-collection is genuinely expensive *and*
+multi-homing is unavailable (e.g. a slow air-gapped signing ceremony that
+cannot be run against parallel operators).
+
 ### VIII. Verify and relay, never hold keys
 
 The service verifies signatures, assembles fully-witnessed transactions,
-and submits them, but it never holds signing keys and never signs.
-Witnesses are produced by clients offline against their own key material.
-Key custody is out of scope, permanently.
+and submits them, but it never holds a signing key over user funds and
+never signs on behalf of a signer. Witnesses are produced by clients
+offline against their own key material. Key custody is out of scope,
+permanently.
+
+An operator MAY hold the key to its own **fee-collection address** — its
+revenue. That key is not in the request path (the service only *reads* fee
+payments to admit a publish; sweeping them to a wallet is out-of-band
+housekeeping) and is never custody of user or coordinated funds. Collecting
+a toll one owns is not holding a key one must be trusted with.
 
 ## Technology & Interface Constraints
 
 - **Language & build:** Haskell, packaged with a Nix flake, matching the
   `cardano-tx-tools` / `amaru-treasury-tx` toolchain. Reuse those libraries
   for phase-1 validation and witness handling; do not fork the crypto.
+- **No on-chain code:** the service ships no validator, minting policy, or
+  script. The fee is an ordinary payment tagged (datum / metadata) with the
+  request body hash; the roster is the native `required_signers` field.
 - **Chain access:** a direct Node-to-Client (N2C) connection to a local
   `cardano-node` is the default source of chain state, behind an interface
   that additional sources MAY implement. No chain backend may leak into the
   pure coordination logic.
 - **API:** contract-first HTTP under `/v1`, with an OpenAPI document checked
   into the repository. The wire contract is the source of truth for
-  consumers; breaking it is a versioned, deliberate act. Because browser
+  consumers **and the interop standard a federation of operators
+  implements** — breaking it is a versioned, deliberate act. Because browser
   clients call the service directly (cross-origin), the API MUST support
   **CORS** with a configurable allowed-origin policy and correct preflight
-  handling. Authorization travels in the request payload as a signature,
-  never in cookies, so CORS is **credential-free** (no
-  `Access-Control-Allow-Credentials`) — consistent with the no-account
+  handling. Authorization travels in the request payload — a signature, or a
+  fee-payment reference — never in cookies, so CORS is **credential-free**
+  (no `Access-Control-Allow-Credentials`), consistent with the no-account
   model.
 - **State:** an explicit persistence layer for the pending-tx wallet,
   swappable behind an interface, durable across restart.
+
+## Economic model & DDoS resistance
+
+The two DoS surfaces are met separately (Principle III): a signer's
+**attention** by the signer-controlled, default-deny filter (no payment),
+and the **service's own resources** by a per-request fee.
+
+The fee is a **non-refundable, per-request toll, weighted by the requested
+validity window**. Publishing carries the unsigned transaction and a
+**proof of an on-chain payment** to the operator's fee address, **tagged
+with the request's body hash**. Publish verifies the payment is on-chain,
+tagged for this request, **covers the required amount**, and is **confirmed
+before** admitting the entry (**pay-before-work**: the service is never made
+to pre-flight, store, and monitor an entry it has not been paid for). The
+body-hash tag binds one payment to one request, so a payment cannot be
+replayed across requests; no off-chain balance ledger is required.
+
+**Why weighted by validity.** The dominant cost of an entry is continuous
+liveness monitoring for its bounded lifetime (Principle V), linear in its
+live duration. A flat fee mis-prices this and is gameable — the cheapest
+attack is a max-TTL entry that pays once and imposes the full horizon of
+monitoring. Weighting the fee by the requested window prices the real cost
+driver and makes it **incentive-compatible**: an attacker's cost tracks the
+service's cost across the whole TTL range. The natural shape is a **two-part
+tariff** — a fixed floor (≈1 ADA, the min-UTxO minimum, covering the
+one-time phase-1 pre-flight and admission) plus a validity-linear term for
+monitoring: `fee = base + rate × (invalidHereafter − tip)`, evaluated at
+admission.
+
+**Non-refundability is the load-bearing hinge — the fee prices the
+reservation, not the usage.** It buys the *window reserved*, not the *time
+consumed*: resolving early forfeits the remainder, and nothing is ever
+returned. This is deliberate. Metering actual time-in-queue would require
+refunding the unused portion, and a refund — like any escrow or
+proof-of-service obligation — reintroduces an on-chain validator (Principle
+VI) and the trust machinery this design exists to avoid. Pricing the
+reservation is also more cost-correct: the service must provision monitoring
+for the window reserved whether or not the entry resolves early. A proposer
+pays to *try*, not to *succeed*.
+
+The weighting is **off-chain arithmetic at admission**: the service reads
+the transaction's own `invalidHereafter`, computes the required fee, and
+checks the tagged payment covers it. The chain still holds only a bare
+payment; the zero-validator invariant (Principle VI) is untouched. An
+operator MAY additionally weight by entry size (input count also drives
+monitoring), but validity is the primary and sufficient axis.
+
+**Pricing is set by operators, not decreed.** Each operator advertises its
+own **schedule** (`base` and `rate`) at or above the marginal cost a live
+request imposes over its lifetime; the market of operators (below) finds the
+level, and operators compete on the curve, not merely a scalar. On a
+**self-hosted, single-tenant** deployment the fee is meaningless — an
+operator charging itself — and is set to zero; resource protection there
+rests on network control and trusted co-signers.
+
+The publish path MUST be designed so the fee gate — and, later, per-operator
+pricing and multi-homing — slots in without reshaping the API.
+
+## Operator market & federation
+
+The service is a **protocol** (the `/v1` contract) with a reference
+operator, designed to admit a **federation** of independent operators. Two
+prior commitments make operators a commodity: keylessness and no custody
+(Principle VIII) give near-zero switching cost — requests are
+re-publishable, witnesses re-signable, nothing is locked in — and the
+contract-first API makes every operator an interchangeable implementation
+of one standard.
+
+- **Censorship-resistance is by exit and redundancy, not by protocol.** A
+  single operator can stall or drop a request; the answer is plurality. For
+  high-stakes requests a client SHOULD **multi-home** — publish to several
+  operators at once — so no single operator's censorship matters. Reactive
+  switching depends on detecting censorship that may be unattributable;
+  proactive multi-homing does not.
+- **The fee is simultaneously spam-defence, revenue, and price signal** —
+  one mechanism, three roles — which is why pricing is left to operators and
+  their market.
+- **Self-hosting is the floor** that keeps operators honest: no operator can
+  charge more than the cost of running your own.
+
+This is roadmap, not Milestone 1. Milestone 1 ships **self-hostable, with
+one reference operator**; discovery, reputation, and multi-home client
+logic are deferred until adoption proves a market exists. The publish path
+is designed so multi-homing slots in without a wire break.
 
 ## Milestones & Delivery
 
 - **Milestone 1 — `required_signers` multisig (current):** serve the full
   lifecycle for transactions whose roster is the `required_signers` field:
-  - witness-gated + phase-1-gated + bounded-TTL publish;
+  - **fee-gated + phase-1-gated + bounded-TTL** publish, open to any
+    proposer (not restricted to required-signers);
   - witness collection and signed-transaction assembly;
   - a **signer-controlled, filterable "what must I sign?" query** (Principle
-    III) — a signer can surface only entries matching their declared
-    open-to-sign criteria, with any stored filter policy self-signed; the
-    baseline predicate is a trust-ordered co-signer allowlist (surface an
-    entry only once it is already witnessed by a co-signer the querying
-    signer trusts);
+    III) — trust-ordered co-signer allowlist as default, plus a bootstrap
+    predicate for first-movers, with any stored filter policy self-signed;
   - continuous liveness / staleness detection with automatic expiry;
   - submit with a persisted receipt.
 - **Deferred:** submission authorization (restricting *who* may press
@@ -156,62 +297,9 @@ Key custody is out of scope, permanently.
   this is operational policy, scoped separately, not a Milestone-1 gate.
 - **Future:** additional roster providers (native-script / Plutus signer
   derivation) behind the Principle-II interface; multi-tenancy (many
-  independent queues in one deployment); richer filter predicates; **paid
-  registration** (a prepaid, refundable deposit token consumed per live
-  request — see below).
-
-## Economic model & DDoS resistance
-
-Denial of service has two distinct surfaces, met by two distinct defenses:
-
-- **A signer's attention** is protected by Principle III (co-signer-only
-  reach plus a signer-controlled, trust-ordered filter). No payment is
-  involved.
-- **The service's own resources** are the other surface: every publish
-  costs a live phase-1 pre-flight against the node, durable storage, and
-  continuous liveness monitoring for up to the entry's bounded lifetime. A
-  holder of one valid required-signer key could flood *publish* and exhaust
-  the service even if no entry ever surfaces to anyone.
-
-The planned defense for the second surface is **paid registration**: a
-publish carries the unsigned transaction, at least one witness, and a
-**proof of payment** — an on-chain token the requester holds under a
-service-defined minting policy.
-
-Rather than mint and burn a fresh single-use receipt for every request
-(one full transaction's worth of lifecycle per registration), the token is
-a **prepaid, refundable deposit**: the requester mints it once to deposit
-capacity worth many registrations, *consumes* capacity from it to register
-each request, and *refunds* the remainder by **burning it to close** their
-relationship with the service. This is capital-efficient for honest,
-high-volume use while preserving the deterrent.
-
-The load-bearing invariant: the token **must participate in each request's
-lifecycle**. Registering a request provably locks a unit of the deposit
-that stays tied up for as long as the request is live, and is released only
-when the request resolves (submitted, retracted, or expired per Principle
-V). This bounds concurrent requests by locked capital — to hold K live
-entries a requester must lock K units — so a flood must lock capital
-proportional to its size for the full bounded TTL and can reclaim it only
-by letting requests resolve. A proof that did not consume capacity would
-deter nothing; consumption *is* the protection. Each locked unit binds to
-its request (e.g. by the request's body hash) so one consumption cannot be
-replayed across transactions.
-
-Permissionless does not mean free: a public toll road has no gatekeeper yet
-still charges, and holding a prepaid deposit creates no account or identity
-— Principle I holds. Whether a slice of each registration is a
-non-refundable fee (to fund operation) on top of the refundable deposit is
-a policy dial left to specification.
-
-This is roadmap, not Milestone 1, but the publish path MUST be designed so
-the proof-of-payment / deposit gate slots in without reshaping the API.
-Open questions for its specification: how locked capacity is represented
-and decremented on-chain (a stateful deposit UTxO, a payment-channel-style
-open/consume/close, or off-chain accounting settled against an on-chain
-deposit); refund and settlement timing; native-vs-Plutus policy; and
-pricing a unit at or above the marginal cost a live request imposes over
-its lifetime.
+  independent queues in one deployment); richer filter predicates; and
+  **operator-market infrastructure** — operator discovery, reputation, and
+  multi-home client publishing.
 
 ## Governance
 
@@ -219,10 +307,21 @@ This constitution supersedes ad-hoc practice. Amendments are documented,
 versioned (semver on this document), and dated; a principle marked
 NON-NEGOTIABLE may be changed only by an explicit amendment, never
 incidentally. Every PR and review verifies compliance — in particular the
-Principle-IV domain-agnostic-core gate, the Principle-I no-account gate, and
-the Principle-III anti-spam guarantees. The publish path is designed from
-the outset to admit the Economic-model proof-of-payment gate without a wire
-break. Added complexity must be justified against these principles or
-removed.
+Principle-IV domain-agnostic-core gate, the Principle-I no-account gate, the
+Principle-III filter-is-sole-inbox-defence guarantee, and the Principle-VI
+**no-on-chain-code** invariant. Non-refundability of the fee is a
+load-bearing decision, not a default, and may not be reversed without
+acknowledging that it reintroduces on-chain validation. Added complexity
+must be justified against these principles or removed.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05
+**v2.0.0 amendment (2026-07-05):** publish is fee-gated and proposer-open,
+not witness-gated (Principle I); the "co-signer-only reach" pillar is
+removed and the default-deny filter becomes the sole inbox defence, with a
+bootstrap predicate for first-movers (Principle III); the refundable
+deposit-token economic model is replaced by a validity-weighted,
+non-refundable per-request fee, establishing the **zero-on-chain-validator**
+invariant
+(Principles V, VI, Economic model); the operator-market / federation
+framing is added.
+
+**Version**: 2.0.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05
