@@ -53,13 +53,23 @@ library
   other-modules:   Paths_cardano_multisig
   autogen-modules: Paths_cardano_multisig
   build-depends:
-    , aeson             <2.3
-    , base              <5
+    , aeson                          <2.3
+    , async
+    , base                           <5
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-node-clients
+    , cardano-slotting
     , cardano-tx-tools
-    , http-types        <0.13
-    , wai               <3.3
-    , wai-cors          <0.3
-    , warp              <3.5
+    , cardano-tx-tools:n2c-resolver
+    , containers
+    , http-types                     <0.13
+    , microlens
+    , ouroboros-network:api
+    , wai                            <3.3
+    , wai-cors                       <0.3
+    , warp                           <3.5
 
 executable cardano-multisig-server
   import:         warnings, language
@@ -75,9 +85,23 @@ test-suite unit-tests
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
   main-is:        Main.hs
-  other-modules:  Cardano.Multisig.ServerSpec
+  other-modules:
+    Cardano.Multisig.ChainSpec
+    Cardano.Multisig.ServerSpec
+
   build-depends:
-    , aeson             <2.3
-    , base              <5
+    , aeson                  <2.3
+    , base                   <5
+    , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-multisig
-    , hspec             <2.12
+    , cardano-node-clients
+    , cardano-slotting
+    , containers
+    , hspec                  <2.12
+    , ouroboros-network:api
+    , text

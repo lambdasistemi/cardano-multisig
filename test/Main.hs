@@ -8,9 +8,12 @@ module Main
 -- Copyright   : (c) lambdasistemi, 2026
 -- License     : Apache-2.0
 
+import Cardano.Multisig.ChainSpec qualified as ChainSpec
 import Cardano.Multisig.ServerSpec qualified as ServerSpec
 import Test.Hspec (hspec)
 
 -- | Run the full unit-test suite.
 main :: IO ()
-main = hspec ServerSpec.spec
+main = hspec $ do
+    ServerSpec.spec
+    ChainSpec.spec
