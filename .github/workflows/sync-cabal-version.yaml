@@ -1,0 +1,48 @@
+name: Sync cabal version
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  sync-version:
+    if: startsWith(github.head_ref, 'release-please--')
+    runs-on: nixos
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync version to cardano-multisig.cabal
+        run: |
+          NEW_VERSION=$(jq -r '."."' .release-please-manifest.json 2>/dev/null || echo "")
+          if [ -z "$NEW_VERSION" ] || [ "$NEW_VERSION" = "null" ]; then
+            echo "No version found in manifest, skipping"
+            exit 0
+          fi
+          # Convert semver (0.4.0) to PVP (0.4.0.0) if needed
+          if [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            NEW_VERSION="${NEW_VERSION}.0"
+          fi
+
+          OLD_VERSION=$(grep -oP '^version:\s*\K[0-9.]+' cardano-multisig.cabal | head -1)
+          echo "Old version: $OLD_VERSION"
+          echo "New version: $NEW_VERSION"
+
+          if [ "$NEW_VERSION" = "$OLD_VERSION" ]; then
+            echo "Versions match, nothing to do"
+            exit 0
+          fi
+
+          sed -i "s/^version:.*$/version:         $NEW_VERSION/" cardano-multisig.cabal
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cardano-multisig.cabal
+          git commit -m "chore: sync cabal version to $NEW_VERSION"
+          git push
