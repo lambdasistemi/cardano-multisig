@@ -2,14 +2,13 @@ module Main
     ( main
     ) where
 
-{- |
-Module      : Main
-Description : cardano-multisig service entry point
-Copyright   : (c) lambdasistemi, 2026
-License     : Apache-2.0
-
-Runs the Milestone-1 coordinator skeleton on a fixed port.
--}
+-- \|
+-- Module      : Main
+-- Description : cardano-multisig service entry point
+-- Copyright   : (c) lambdasistemi, 2026
+-- License     : Apache-2.0
+--
+-- Runs the Milestone-1 coordinator skeleton on a fixed port.
 
 import Cardano.Multisig.Server (runServer)
 
