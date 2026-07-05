@@ -26,7 +26,7 @@ spec = do
             ]
 
     describe "operatorSchedule"
-        $ it "is a JSON object"
-        $ case operatorSchedule of
+        $ it "is a JSON object for the given network"
+        $ case operatorSchedule "preprod" of
             Object _ -> True `shouldBe` True
-            _ -> operatorSchedule `shouldBe` object []
+            _ -> operatorSchedule "preprod" `shouldBe` object []

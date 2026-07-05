@@ -50,12 +50,13 @@ errorEnvelope code message =
                 ]
         ]
 
--- | The operator discovery and fee-schedule document. Static in
--- Milestone-1 foundations; a real schedule is wired in the publish epic.
-operatorSchedule :: Value
-operatorSchedule =
+-- | The operator discovery and fee-schedule document for the given
+-- network. Static in Milestone-1 foundations; a real schedule is wired
+-- in the publish epic.
+operatorSchedule :: String -> Value
+operatorSchedule network =
     object
-        [ "network" .= ("mainnet" :: String)
+        [ "network" .= network
         , "fee"
             .= object
                 [ "base_lovelace" .= (1000000 :: Int)
@@ -77,14 +78,14 @@ jsonResponse status body =
         [(hContentType, "application/json")]
         (encode body)
 
--- | The WAI application. Serves the operator schedule and a health
--- probe; every other @/v1@ route returns a @501@ envelope, and anything
--- else a @404@.
-application :: Application
-application request respond =
+-- | The WAI application for the given network. Serves the operator
+-- schedule and a health probe; every other @/v1@ route returns a @501@
+-- envelope, and anything else a @404@.
+application :: String -> Application
+application network request respond =
     respond $ case (requestMethod request, pathInfo request) of
         ("GET", ["v1", "operator"]) ->
-            jsonResponse status200 operatorSchedule
+            jsonResponse status200 (operatorSchedule network)
         ("GET", ["v1", "health"]) ->
             jsonResponse status200 healthy
         ("GET", ["health"]) ->
@@ -98,9 +99,11 @@ application request respond =
             jsonResponse status404
                 $ errorEnvelope "not_found" "no such route"
 
--- | Run the service with a credential-free CORS policy on the given port.
-runServer :: Port -> IO ()
-runServer port = run port $ cors (const $ Just policy) application
+-- | Run the service for @network@ with a credential-free CORS policy on
+-- the given port.
+runServer :: Port -> String -> IO ()
+runServer port network =
+    run port $ cors (const $ Just policy) (application network)
   where
     policy =
         simpleCorsResourcePolicy
