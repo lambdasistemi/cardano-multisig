@@ -1,0 +1,6 @@
+services:
+  cardano-multisig:
+    image: ghcr.io/lambdasistemi/cardano-multisig:latest
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
