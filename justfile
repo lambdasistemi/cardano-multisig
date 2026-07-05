@@ -53,6 +53,17 @@ test match="":
 unit match="":
     just test "{{ match }}"
 
+# Opt-in live N2C smoke against the preprod node on development.
+live-chain-payment-read:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${CARDANO_MULTISIG_LIVE_TXIN:?set to <64-hex-txid>#<index> for a currently unspent preprod output}"
+    socket="${CARDANO_MULTISIG_LIVE_SOCKET:-/node/preprod/ipc/node.socket}"
+    magic="${CARDANO_MULTISIG_LIVE_MAGIC:-1}"
+    remote_dir="${CARDANO_MULTISIG_LIVE_REMOTE_DIR:-/code/cardano-multisig-e2}"
+    ssh development \
+        "test -S '$socket' && cd '$remote_dir' && CARDANO_MULTISIG_LIVE_SMOKE=1 CARDANO_MULTISIG_LIVE_TXIN='$CARDANO_MULTISIG_LIVE_TXIN' CARDANO_MULTISIG_LIVE_SOCKET='$socket' CARDANO_MULTISIG_LIVE_MAGIC='$magic' nix develop --quiet -c just unit 'live N2C payment reader smoke'"
+
 # Full CI pipeline (run inside nix develop)
 ci:
     #!/usr/bin/env bash
