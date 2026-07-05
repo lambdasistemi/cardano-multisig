@@ -81,30 +81,7 @@ jobs:
       - name: Run HLint
         run: nix --quiet develop -c just hlint
 
-  publish-image:
-    name: Publish image
-    if: github.event_name == 'push'
-    needs: [build, unit, dev-shell, formatting, hlint]
-    runs-on: nixos
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v6
-      - uses: cachix/cachix-action@v15
-        with:
-          name: paolino
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-      - name: Build and load image
-        run: |
-          nix --quiet build .#docker-image -o cardano-multisig-image
-          docker load < cardano-multisig-image
-      - name: Push commit-hash-tagged image to ghcr
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          VERSION=$(nix --quiet eval --raw .#version)
-          IMAGE=ghcr.io/lambdasistemi/cardano-multisig
-          docker tag "${IMAGE}:${VERSION}" "${IMAGE}:${GITHUB_SHA}"
-          docker push "${IMAGE}:${VERSION}"
-          docker push "${IMAGE}:${GITHUB_SHA}"
+  # Note: the `nixos` runners have no docker daemon, so the image is not
+  # pushed from CI. The `Build` job publishes the nix-built image as a
+  # downloadable artifact; deployment ships that image to the host
+  # directly (see CD/). Registry publishing, if wanted, must use skopeo.

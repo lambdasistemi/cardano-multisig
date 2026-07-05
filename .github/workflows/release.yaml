@@ -41,18 +41,6 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - name: Build docker image
         run: nix --quiet build .#docker-image -o cardano-multisig-image
-      - name: Push tagged image to ghcr
-        run: |
-          docker load < cardano-multisig-image
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          VERSION=$(nix --quiet eval --raw .#version)
-          IMAGE=ghcr.io/lambdasistemi/cardano-multisig
-          TAG="${{ needs.release-please.outputs.tag_name }}"
-          docker tag "${IMAGE}:${VERSION}" "${IMAGE}:${TAG}"
-          docker tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
-          docker push "${IMAGE}:${TAG}"
-          docker push "${IMAGE}:latest"
       - name: Attach image tarball to release
         env:
           GH_TOKEN: ${{ github.token }}
