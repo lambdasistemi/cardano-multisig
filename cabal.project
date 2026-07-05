@@ -1,4 +1,113 @@
 index-state: 2026-04-17T00:00:00Z
 
+index-state:
+  , hackage.haskell.org 2026-04-17T00:00:00Z
+  , cardano-haskell-packages 2026-05-25T13:25:40Z
+
 packages:
   .
+
+repository cardano-haskell-packages
+  url: https://chap.intersectmbo.org/
+  secure: True
+  root-keys:
+    3e0cce471cf09815f930210f7827266fd09045445d65923e6d0238a6cd15126f
+    443abb7fb497a134c343faf52f0b659bd7999bc06b7f63fa76dc99d631f9bea1
+    a86a1f6ce86c449c46666bda44268677abf29b5b2d2eb5ec7af903ec2f117a82
+    bcec67e8e99cabfa7764d75ad9b158d72bfacf70ca1d0ec8bc6b4406d1bf8413
+    c00aae8461a256275598500ea0e187588c35a5d5d7454fb57eac18d9edb86a56
+    d4a35cd3121aa00d18544bb0ac01c3e1691d618f462c46129271bccf39f7e8ee
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/rocksdb-haskell.git
+  tag: a3e86b39f9510fea54abf734ee84aec33d0d683f
+  --sha256: 1gjzqhf81fy3bpc79ndmx3s77x3s1gf0lsk762acbfnpfh6g1hd0
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/rocksdb-kv-transactions
+  tag: e2e77579888ebbd832ea750ebf2635dfc3307025
+  --sha256: 0nd1yz6k3xh1p7nlswp2jbw74bzqr7bvz11kcfyhhimqmjhkqvwm
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/cardano-utxo-csmt
+  tag: f4772f73dde0a84dff9608d6ac2b168c4315b05f
+  --sha256: 129sv2ayp7y2s5mhapx3720pr005dnfybz02nwibgyhsjqp292vz
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/chain-follower
+  tag: d592a5015f8d7edb2d6022936a67a054dfe5329f
+  --sha256: 1pm2yhsm2zg5nv01aixv6ss21f2ka8ysq6dv2q4mpf9smz0m8g78
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/haskell-mts
+  tag: ab15f7b2dea73165b785c90333bbd09a36528a07
+  --sha256: 081wz3vq8d15wh1mziqnqhk2ai4i304gv7vxrhw9hqjr2sa9xy1a
+
+source-repository-package
+  type: git
+  location: https://github.com/paolino/aiken-codegen
+  tag: 74f364c10e930ce2bf47e64b755ede4424733325
+  --sha256: 0rg5hqjix9bs9radzib1ppy09qamxkkqr0hdvc8qm907c21cy2g8
+
+source-repository-package
+  type: git
+  location: https://github.com/cardano-foundation/cardano-ledger-read
+  tag: 34d0767bd5c3648ab77ecbc00db0ad0a2a5316a5
+  --sha256: 0v357pbw2s22lsizxidq67pn4dcjkajips6mlcskd1zna35nyyv6
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/contra-tracer-contrib
+  tag: f0518e871391133efa10dab5b20a36da7b673389
+  --sha256: 0193m530mx6pgp1d8ms9q91bhr3hqzcg92dirz6j7lw25mx2j3ns
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/cardano-node-clients
+  tag: e4b01cb9efdf88e99934cf7a09fed0e25bad1019
+  --sha256: 1ll7lsyfk2a8flmrlrbbvd609mk8szkjpcpd6xxnj46p9vbm5r61
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/cardano-tx-tools
+  tag: 631f1341fde6e4a11e94b058cf5f2925ffeb9eac
+  --sha256: 0asp3sx7hd8hip739kbz65986jlv8qx9342m9gqpqcxih6pxfgjj
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/github-release-check
+  tag: d90131112a4d6c048d1809adaffdefed92e8e841
+  --sha256: 0ad6yi431w8h5i3x9x661b99frcgvd39gm4164y8cx1ihpsjixn3
+
+constraints:
+  contra-tracer-contrib +iohk,
+  cardano-ledger-allegra ==1.9.0.0,
+  cardano-ledger-alonzo ==1.15.0.0,
+  cardano-ledger-api ==1.13.0.0,
+  cardano-ledger-babbage ==1.13.0.0,
+  cardano-ledger-byron ==1.3.0.0,
+  cardano-ledger-conway ==1.21.0.0,
+  cardano-ledger-core ==1.19.0.0,
+  cardano-ledger-mary ==1.10.0.0,
+  cardano-ledger-shelley ==1.18.0.0,
+  cardano-crypto-class ==2.3.1.0,
+  cardano-crypto-praos ==2.2.2.0,
+  cardano-protocol-tpraos ==1.5.0.0,
+  cuddle ==1.1.1.0,
+  quickcheck-state-machine ==0.10.3,
+  ouroboros-consensus ==1.0.0.0,
+  ouroboros-network ==1.1.0.0,
+  typed-protocols ==1.2.0.0
+
+-- Disable pkgconfig for lzma (bundled C sources)
+package lzma
+  flags: -pkgconfig
+
+-- chain-follower has data-default <0.8 but cardano-ledger-shelley pulls 0.8
+allow-newer: chain-follower:data-default
+allow-newer: mts:containers

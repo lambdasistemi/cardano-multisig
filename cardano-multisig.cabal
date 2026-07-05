@@ -46,18 +46,20 @@ library
   import:          warnings, language
   hs-source-dirs:  src
   exposed-modules:
+    Cardano.Multisig.Chain
     Cardano.Multisig.Server
     Cardano.Multisig.Version
 
   other-modules:   Paths_cardano_multisig
   autogen-modules: Paths_cardano_multisig
   build-depends:
-    , aeson       <2.3
-    , base        <5
-    , http-types  <0.13
-    , wai         <3.3
-    , wai-cors    <0.3
-    , warp        <3.5
+    , aeson             <2.3
+    , base              <5
+    , cardano-tx-tools
+    , http-types        <0.13
+    , wai               <3.3
+    , wai-cors          <0.3
+    , warp              <3.5
 
 executable cardano-multisig-server
   import:         warnings, language
