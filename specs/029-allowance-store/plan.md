@@ -50,7 +50,7 @@ keep them private.
 
 ## Store API
 
-Extend both `Store` constructors with:
+Extend `StoreWithFilters` with:
 
 ```haskell
 storeUpsertFeePayment :: FeePayment -> m ()
@@ -75,6 +75,12 @@ RocksDB implementation:
 
   so large depths cannot underflow. Set `allowanceHasUnconfirmed` when at least
   one matching payment is not final.
+
+The plain `Store` constructor stays unchanged. This matches the existing split:
+`StoreWithFilters` carries operations needed by the full service store, while
+plain `Store` remains the narrower test/mock surface used by older publish
+tests. The public record selectors are still exported from
+`Cardano.Multisig.Store` because they are fields of `StoreWithFilters`.
 
 ## Slice Plan
 
