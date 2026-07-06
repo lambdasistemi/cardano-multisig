@@ -2,13 +2,13 @@
 
 ## Slice 1 - Liveness Domain And Tick
 
-- [ ] T016-S1 Add `Cardano.Multisig.Liveness` with live-entry filtering,
+- [X] T016-S1 Add `Cardano.Multisig.Liveness` with live-entry filtering,
   expiry decisions, input staleness checks, and one monitor tick.
-- [ ] T016-S1 Unit-test expired TTL selection, spent-input staleness, and a live
+- [X] T016-S1 Unit-test expired TTL selection, spent-input staleness, and a live
   entry left untouched through mock dependencies.
-- [ ] T016-S1 Wire the new module and liveness spec into
+- [X] T016-S1 Wire the new module and liveness spec into
   `cardano-multisig.cabal` and `test/Main.hs`.
-- [ ] T016-S1 Run focused liveness tests and `./gate.sh`, then commit the slice.
+- [X] T016-S1 Run focused liveness tests and `./gate.sh`, then commit the slice.
 
 ## Slice 2 - HTTP Payload And Startup Wiring
 

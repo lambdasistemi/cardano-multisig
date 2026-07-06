@@ -10,6 +10,7 @@ module Main
 
 import Cardano.Multisig.ChainSpec qualified as ChainSpec
 import Cardano.Multisig.FilterSpec qualified as FilterSpec
+import Cardano.Multisig.LivenessSpec qualified as LivenessSpec
 import Cardano.Multisig.PublishSpec qualified as PublishSpec
 import Cardano.Multisig.ServerSpec qualified as ServerSpec
 import Cardano.Multisig.StoreSpec qualified as StoreSpec
@@ -22,6 +23,7 @@ main = hspec $ do
     FilterSpec.spec
     ServerSpec.spec
     ChainSpec.spec
+    LivenessSpec.spec
     PublishSpec.spec
     StoreSpec.spec
     WitnessSpec.spec
