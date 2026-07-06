@@ -13,20 +13,31 @@
   patterns before dispatch.
 - [X] T000-S0 ORCHESTRATOR-OWNED Write `spec.md`, `plan.md`, and `tasks.md`.
 
-## Slice 1 - Classifier and Mock Event Loop
+## Slice 1 - Malformed Store, Classifier, and Mock Event Loop
 
-- [ ] T001-S1 Add `Cardano.Multisig.FeeIndexer` with pure fee-payment
-  classification and `runFeeIndexerOnce`.
+- [ ] T001-S1 Add additive malformed-payment store support keyed by `TxIn`,
+  with value carrying the containing block slot.
+- [ ] T001-S1 Add malformed-payment write/read/rollback operations through
+  `Store`, `StoreWithFilters`, and RocksDB without changing #29 allowance
+  semantics.
+- [ ] T001-S1 Add store tests proving malformed fee payments can be written,
+  read by `TxIn`, and rolled back from the containing block slot.
+- [ ] T001-S1 Add `Cardano.Multisig.FeeIndexer` with pure classification that
+  returns attributed payment results and malformed-payment results, plus
+  `runFeeIndexerOnce`.
 - [ ] T001-S1 Register the module and focused test spec in
   `cardano-multisig.cabal` and `test/Main.hs`.
 - [ ] T001-S1 Add tests for fee-address plus decodable tag, wrong address,
-  missing or malformed tag, and multiple fee outputs with distinct txins.
+  missing or malformed tag recorded as malformed, and multiple fee outputs with
+  distinct txins.
 - [ ] T001-S1 Add a mock chain-event test proving roll-forward writes
-  payments and rollback calls `storeRollbackFeePaymentsFrom`.
+  attributed payments and malformed records, and rollback calls both rollback
+  operations.
 - [ ] T001-S1 Run
-  `nix develop --quiet -c just unit "Cardano.Multisig.FeeIndexer"` and
+  `nix develop --quiet -c just unit "Cardano.Multisig.FeeIndexer"`,
+  `nix develop --quiet -c just unit "Cardano.Multisig.Store"`, and
   `./gate.sh`.
-- [ ] T001-S1 Commit as `feat: add fee payment classifier` with trailer
+- [ ] T001-S1 Commit as `feat: record malformed fee payments` with trailer
   `Tasks: T001`.
 
 ## Slice 2 - Checkpointed N2C Follower
@@ -35,16 +46,17 @@
   `cardano-node-clients`.
 - [ ] T002-S2 Add file-backed checkpoint save/load helpers and warm-resume
   start-point selection.
-- [ ] T002-S2 On roll-forward, apply classified payments, persist checkpoint,
-  and update observed tip.
-- [ ] T002-S2 On roll-backward, call `storeRollbackFeePaymentsFrom`, persist
-  the rollback point when concrete, and continue.
-- [ ] T002-S2 Add safe reset behavior for warm `intersectNotFound`: roll fee
-  payments back from slot 0 before retrying from origin.
+- [ ] T002-S2 On roll-forward, apply classified attributed payments and
+  malformed records, persist checkpoint, and update observed tip.
+- [ ] T002-S2 On roll-backward, roll back both attributed payments and
+  malformed records, persist the rollback point when concrete, and continue.
+- [ ] T002-S2 Add safe reset behavior for warm `intersectNotFound`: roll
+  attributed payments and malformed records back from slot 0 before retrying
+  from origin.
 - [ ] T002-S2 Add a supervised retry wrapper that retries synchronous
   transient failures while preserving async cancellation.
 - [ ] T002-S2 Add injected-runner tests for warm resume, rollback, safe reset,
-  and one transient retry.
+  malformed-row rollback, and one transient retry.
 - [ ] T002-S2 Run
   `nix develop --quiet -c just unit "Cardano.Multisig.FeeIndexer"` and
   `./gate.sh`.
