@@ -91,6 +91,6 @@
   `CI-PASS`.
 - [X] T004-S4 ORCHESTRATOR-OWNED Update PR #36 body with delivered behavior,
   tests, and hard-rule evidence.
-- [X] T004-S4 ORCHESTRATOR-OWNED Retain `gate.sh` and leave PR #36 draft per
-  the operator's green-draft handoff; do not mark ready and do not merge.
+- [X] T004-S4 ORCHESTRATOR-OWNED Drop `gate.sh`, commit
+  `chore: drop gate.sh (ready for review)`, and mark PR #36 ready.
 - [X] T004-S4 ORCHESTRATOR-OWNED Append `READY` and `COMPLETE`; do not merge.
