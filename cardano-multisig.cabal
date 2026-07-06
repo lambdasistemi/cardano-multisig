@@ -49,6 +49,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Cardano.Multisig.Chain
+    Cardano.Multisig.FeeTag
     Cardano.Multisig.Filter
     Cardano.Multisig.Liveness
     Cardano.Multisig.Publish
@@ -76,6 +77,7 @@ library
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-ledger-mary
+    , cardano-ledger-shelley
     , cardano-node-clients
     , cardano-slotting
     , cardano-tx-tools
@@ -112,6 +114,7 @@ test-suite unit-tests
   main-is:        Main.hs
   other-modules:
     Cardano.Multisig.ChainSpec
+    Cardano.Multisig.FeeTagSpec
     Cardano.Multisig.FilterSpec
     Cardano.Multisig.LivenessSpec
     Cardano.Multisig.PublishSpec
@@ -133,6 +136,7 @@ test-suite unit-tests
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-ledger-mary
+    , cardano-ledger-shelley
     , cardano-multisig
     , cardano-node-clients
     , cardano-slotting
@@ -143,6 +147,7 @@ test-suite unit-tests
     , microlens
     , mtl
     , ouroboros-network:api
+    , QuickCheck
     , temporary
     , text
     , time
