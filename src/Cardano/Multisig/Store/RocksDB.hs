@@ -4,17 +4,21 @@ module Cardano.Multisig.Store.RocksDB
     )
 where
 
+import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Multisig.Store
     ( Entry (..)
     , EntryId
     , FeeAllowance (..)
     , FeePayment (..)
+    , MalformedFeePayment (..)
     , Store (..)
     , decodeEntry
     , decodeFeePayment
+    , decodeMalformedFeePayment
     , decodeReceipt
     , encodeEntry
     , encodeFeePayment
+    , encodeMalformedFeePayment
     , encodeReceipt
     )
 import Cardano.Multisig.Store.Columns
@@ -111,6 +115,29 @@ mkRocksDBStore (KV.RunTransaction runTx) =
                         tip
                         depth
                         (map snd rows)
+        , storePutMalformedFeePayment = \payment ->
+            runTx
+                $ KV.insert
+                    MalformedFeePaymentsCol
+                    (malformedFeePaymentTxIn payment)
+                    (encodeMalformedFeePayment payment)
+        , storeMalformedFeePayment = \txIn ->
+            runTx
+                $ decodeStored
+                    "malformed fee payment"
+                    decodeMalformedFeePayment
+                    <$> KV.query MalformedFeePaymentsCol txIn
+        , storeRollbackMalformedFeePaymentsFrom = \rollbackSlot ->
+            runTx $ do
+                rows <-
+                    KV.iterating MalformedFeePaymentsCol
+                        $ collectMalformedFeePaymentRows []
+                let stale =
+                        [ key
+                        | (key, payment) <- rows
+                        , malformedFeePaymentBlockSlot payment > rollbackSlot
+                        ]
+                traverse_ (KV.delete MalformedFeePaymentsCol) stale
         }
 
 mkStoreDatabase :: DB -> Database IO ColumnFamily Columns BatchOp
@@ -135,6 +162,7 @@ storeColumnFamilies =
     , ("receipts", storeConfig)
     , ("signer_filters", storeConfig)
     , ("fee_payments", storeConfig)
+    , ("malformed_fee_payments", storeConfig)
     ]
 
 storeConfig :: Config
@@ -191,6 +219,32 @@ collectFeePaymentRows acc = do
                 case decodeStored "fee payment" decodeFeePayment (Just bytes) of
                     Nothing -> collectFeePaymentRows acc
                     Just payment -> collectFeePaymentRows ((key, payment) : acc)
+
+collectMalformedFeePaymentRows
+    :: [(TxIn, MalformedFeePayment)]
+    -> Cursor.Cursor
+        (KV.Transaction IO ColumnFamily Columns BatchOp)
+        (KV.KV TxIn ByteString)
+        [(TxIn, MalformedFeePayment)]
+collectMalformedFeePaymentRows acc = do
+    next <-
+        if null acc
+            then Cursor.firstEntry
+            else Cursor.nextEntry
+    case next of
+        Nothing -> pure (reverse acc)
+        Just
+            Cursor.Entry
+                { Cursor.entryKey = key
+                , Cursor.entryValue = bytes
+                } ->
+                case decodeStored
+                    "malformed fee payment"
+                    decodeMalformedFeePayment
+                    (Just bytes) of
+                    Nothing -> collectMalformedFeePaymentRows acc
+                    Just payment ->
+                        collectMalformedFeePaymentRows ((key, payment) : acc)
 
 allowanceFromPayments
     :: EntryId

@@ -8,13 +8,16 @@ module Cardano.Multisig.Store
     , EntryStatus (..)
     , FeeAllowance (..)
     , FeePayment (..)
+    , MalformedFeePayment (..)
     , Receipt (..)
     , Store (..)
     , decodeEntry
     , decodeFeePayment
+    , decodeMalformedFeePayment
     , decodeReceipt
     , encodeEntry
     , encodeFeePayment
+    , encodeMalformedFeePayment
     , encodeReceipt
     , entryIdFromTx
     )
@@ -90,6 +93,12 @@ data FeePayment = FeePayment
     }
     deriving stock (Eq, Show)
 
+data MalformedFeePayment = MalformedFeePayment
+    { malformedFeePaymentTxIn :: TxIn
+    , malformedFeePaymentBlockSlot :: SlotNo
+    }
+    deriving stock (Eq, Show)
+
 data FeeAllowance = FeeAllowance
     { allowanceLovelace :: Word64
     , allowanceRequiredDepth :: Word
@@ -117,6 +126,9 @@ data Store m
         , storeUpsertFeePayment :: FeePayment -> m ()
         , storeRollbackFeePaymentsFrom :: SlotNo -> m ()
         , storeAllowanceFor :: EntryId -> SlotNo -> Word -> m FeeAllowance
+        , storePutMalformedFeePayment :: MalformedFeePayment -> m ()
+        , storeMalformedFeePayment :: TxIn -> m (Maybe MalformedFeePayment)
+        , storeRollbackMalformedFeePaymentsFrom :: SlotNo -> m ()
         }
 
 entryIdFromTx :: ConwayTx -> EntryId
@@ -183,6 +195,25 @@ decodeFeePayment =
                 , feePaymentTxIn = decodedTxIn
                 , feePaymentLovelace = decodedLovelace
                 , feePaymentBlockSlot = decodedBlockSlot
+                }
+
+encodeMalformedFeePayment :: MalformedFeePayment -> ByteString
+encodeMalformedFeePayment MalformedFeePayment{..} =
+    encodeCBOR
+        $ CBOR.encodeListLen 2
+            <> CBOR.encodeBytes (encodeLedger malformedFeePaymentTxIn)
+            <> CBOR.encodeBytes (encodeLedger malformedFeePaymentBlockSlot)
+
+decodeMalformedFeePayment :: ByteString -> Maybe MalformedFeePayment
+decodeMalformedFeePayment =
+    decodeCBOR $ do
+        decodeListLenOf 2
+        decodedTxIn <- decodeBytesWith decodeLedger
+        decodedBlockSlot <- decodeBytesWith decodeLedger
+        pure
+            MalformedFeePayment
+                { malformedFeePaymentTxIn = decodedTxIn
+                , malformedFeePaymentBlockSlot = decodedBlockSlot
                 }
 
 encodeReceipt :: Receipt -> ByteString

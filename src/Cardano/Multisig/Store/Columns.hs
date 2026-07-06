@@ -45,6 +45,7 @@ data Columns c where
     ReceiptsCol :: Columns (KV EntryId ByteString)
     SignerFiltersCol :: Columns (KV (KeyHash Guard) ByteString)
     FeePaymentsCol :: Columns (KV FeePaymentKey ByteString)
+    MalformedFeePaymentsCol :: Columns (KV TxIn ByteString)
 
 data FeePaymentKey = FeePaymentKey EntryId TxIn
     deriving stock (Eq, Ord, Show)
@@ -54,6 +55,7 @@ instance GEq Columns where
     geq ReceiptsCol ReceiptsCol = Just Refl
     geq SignerFiltersCol SignerFiltersCol = Just Refl
     geq FeePaymentsCol FeePaymentsCol = Just Refl
+    geq MalformedFeePaymentsCol MalformedFeePaymentsCol = Just Refl
     geq _ _ = Nothing
 
 instance GCompare Columns where
@@ -61,6 +63,7 @@ instance GCompare Columns where
     gcompare ReceiptsCol ReceiptsCol = GEQ
     gcompare SignerFiltersCol SignerFiltersCol = GEQ
     gcompare FeePaymentsCol FeePaymentsCol = GEQ
+    gcompare MalformedFeePaymentsCol MalformedFeePaymentsCol = GEQ
     gcompare a b =
         case compare (columnRank a) (columnRank b) of
             LT -> GLT
@@ -74,6 +77,7 @@ codecs =
         , ReceiptsCol :=> bytesCodec
         , SignerFiltersCol :=> signerFilterCodec
         , FeePaymentsCol :=> feePaymentCodec
+        , MalformedFeePaymentsCol :=> malformedFeePaymentCodec
         ]
   where
     bytesCodec =
@@ -91,6 +95,11 @@ codecs =
             { keyCodec = feePaymentKeyCodec
             , valueCodec = byteStringCodec
             }
+    malformedFeePaymentCodec =
+        Codecs
+            { keyCodec = txInCodec
+            , valueCodec = byteStringCodec
+            }
 
 columnRank :: Columns c -> Int
 columnRank = \case
@@ -98,6 +107,7 @@ columnRank = \case
     ReceiptsCol -> 1
     SignerFiltersCol -> 2
     FeePaymentsCol -> 3
+    MalformedFeePaymentsCol -> 4
 
 keyHashCodec :: Prism' ByteString (KeyHash Guard)
 keyHashCodec =
@@ -110,6 +120,10 @@ byteStringCodec =
 feePaymentKeyCodec :: Prism' ByteString FeePaymentKey
 feePaymentKeyCodec =
     prism' encodeFeePaymentKey decodeFeePaymentKey
+
+txInCodec :: Prism' ByteString TxIn
+txInCodec =
+    prism' ledgerEncode ledgerDecode
 
 encodeFeePaymentKey :: FeePaymentKey -> ByteString
 encodeFeePaymentKey (FeePaymentKey bodyHash txIn) =

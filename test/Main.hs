@@ -9,6 +9,7 @@ module Main
 -- License     : Apache-2.0
 
 import Cardano.Multisig.ChainSpec qualified as ChainSpec
+import Cardano.Multisig.FeeIndexerSpec qualified as FeeIndexerSpec
 import Cardano.Multisig.FeeTagSpec qualified as FeeTagSpec
 import Cardano.Multisig.FilterSpec qualified as FilterSpec
 import Cardano.Multisig.LivenessSpec qualified as LivenessSpec
@@ -22,6 +23,7 @@ import Test.Hspec (hspec)
 main :: IO ()
 main = hspec $ do
     FeeTagSpec.spec
+    FeeIndexerSpec.spec
     FilterSpec.spec
     ServerSpec.spec
     ChainSpec.spec

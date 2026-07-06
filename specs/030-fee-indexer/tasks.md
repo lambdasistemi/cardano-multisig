@@ -15,29 +15,29 @@
 
 ## Slice 1 - Malformed Store, Classifier, and Mock Event Loop
 
-- [ ] T001-S1 Add additive malformed-payment store support keyed by `TxIn`,
+- [X] T001-S1 Add additive malformed-payment store support keyed by `TxIn`,
   with value carrying the containing block slot.
-- [ ] T001-S1 Add malformed-payment write/read/rollback operations through
+- [X] T001-S1 Add malformed-payment write/read/rollback operations through
   `Store`, `StoreWithFilters`, and RocksDB without changing #29 allowance
   semantics.
-- [ ] T001-S1 Add store tests proving malformed fee payments can be written,
+- [X] T001-S1 Add store tests proving malformed fee payments can be written,
   read by `TxIn`, and rolled back from the containing block slot.
-- [ ] T001-S1 Add `Cardano.Multisig.FeeIndexer` with pure classification that
+- [X] T001-S1 Add `Cardano.Multisig.FeeIndexer` with pure classification that
   returns attributed payment results and malformed-payment results, plus
   `runFeeIndexerOnce`.
-- [ ] T001-S1 Register the module and focused test spec in
+- [X] T001-S1 Register the module and focused test spec in
   `cardano-multisig.cabal` and `test/Main.hs`.
-- [ ] T001-S1 Add tests for fee-address plus decodable tag, wrong address,
+- [X] T001-S1 Add tests for fee-address plus decodable tag, wrong address,
   missing or malformed tag recorded as malformed, and multiple fee outputs with
   distinct txins.
-- [ ] T001-S1 Add a mock chain-event test proving roll-forward writes
+- [X] T001-S1 Add a mock chain-event test proving roll-forward writes
   attributed payments and malformed records, and rollback calls both rollback
   operations.
-- [ ] T001-S1 Run
+- [X] T001-S1 Run
   `nix develop --quiet -c just unit "Cardano.Multisig.FeeIndexer"`,
   `nix develop --quiet -c just unit "Cardano.Multisig.Store"`, and
   `./gate.sh`.
-- [ ] T001-S1 Commit as `feat: record malformed fee payments` with trailer
+- [X] T001-S1 Commit as `feat: record malformed fee payments` with trailer
   `Tasks: T001`.
 
 ## Slice 2 - Checkpointed N2C Follower
