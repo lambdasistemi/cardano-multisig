@@ -16,6 +16,9 @@
       url = "github:input-output-hk/iohk-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    cardano-node = {
+      url = "github:IntersectMBO/cardano-node/10.7.0";
+    };
     CHaP = {
       url = "github:intersectmbo/cardano-haskell-packages?ref=repo";
       flake = false;
@@ -23,7 +26,8 @@
   };
 
   outputs =
-    inputs@{ self, nixpkgs, flake-utils, haskellNix, iohkNix, CHaP, mkdocs, ... }:
+    inputs@{ self, nixpkgs, flake-utils, haskellNix, iohkNix, cardano-node
+    , CHaP, mkdocs, ... }:
     let
       version = self.dirtyShortRev or self.shortRev;
 
@@ -46,10 +50,49 @@
           };
           docker-image =
             import ./nix/docker-image.nix { inherit pkgs version project; };
+          cardanoNode = cardano-node.packages.${system}.cardano-node;
+          cardanoCli =
+            cardano-node.packages.${system}.cardano-cli or cardanoNode;
+          devnetPublishSmokeApp = pkgs.writeShellApplication {
+            name = "devnet-publish-smoke";
+            runtimeInputs = [
+              cardanoNode
+              cardanoCli
+              pkgs.curl
+              project.packages.cardano-multisig
+              project.packages.devnet-publish-smoke
+            ];
+            text = ''
+              export E2E_GENESIS_DIR=${./test/fixtures/devnet-genesis}
+              exec devnet-publish-smoke
+            '';
+          };
+          devnetPublishSmokeCheck =
+            pkgs.runCommand "devnet-publish-smoke-check" {
+              nativeBuildInputs =
+                pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux
+                  [ pkgs.glibcLocales ];
+              LANG = "C.UTF-8";
+              LC_ALL = "C.UTF-8";
+            } ''
+              set -euo pipefail
+              cd ${./.}
+              ${pkgs.lib.getExe devnetPublishSmokeApp}
+              touch "$out"
+            '';
         in {
           packages = project.packages // {
             default = project.packages.cardano-multisig;
             inherit docker-image;
+          };
+          checks = {
+            devnet-publish-smoke = devnetPublishSmokeCheck;
+          };
+          apps = {
+            devnet-publish-smoke = {
+              type = "app";
+              program = pkgs.lib.getExe devnetPublishSmokeApp;
+            };
           };
           inherit (project) devShells;
         };

@@ -70,4 +70,6 @@ in {
     project.hsPkgs.cardano-multisig.components.exes.cardano-multisig-server;
   packages.unit-tests =
     project.hsPkgs.cardano-multisig.components.tests.unit-tests;
+  packages.devnet-publish-smoke =
+    project.hsPkgs.cardano-multisig.components.exes.devnet-publish-smoke;
 }

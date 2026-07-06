@@ -162,3 +162,22 @@ test-suite unit-tests
     , time
     , wai                        <3.3
     , wai-extra
+
+executable devnet-publish-smoke
+  import:         warnings, language
+  hs-source-dirs: test
+  main-is:        DevnetPublishSmoke/Main.hs
+  ghc-options:    -threaded -rtsopts
+  build-depends:
+    , aeson              <2.3
+    , base               <5
+    , base16-bytestring
+    , bytestring
+    , directory
+    , filepath
+    , network
+    , process
+    , temporary
+    , text
+    , time
+    , unix

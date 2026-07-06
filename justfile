@@ -59,6 +59,12 @@ test match="":
 unit match="":
     just test "{{ match }}"
 
+# Run the live devnet publish smoke
+devnet-publish-smoke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nix run --quiet .#devnet-publish-smoke
+
 # Opt-in live N2C smoke against the preprod node on development.
 live-chain-payment-read:
     #!/usr/bin/env bash
