@@ -69,10 +69,12 @@ import Cardano.Ledger.Keys
 import Cardano.Ledger.Mary.Value (MaryValue (..), MultiAsset (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Multisig.Chain
-    ( PaymentConfirmation (..)
+    ( N2cConfig (..)
+    , PaymentConfirmation (..)
     , PaymentConfirmationEvidence (..)
     , PaymentReadResult (..)
     )
+import Cardano.Multisig.FeeIndexer (FeeIndexerConfig (..))
 import Cardano.Multisig.Filter
     ( FilterPolicy (..)
     , canonicalFilterPolicyBytes
@@ -85,9 +87,13 @@ import Cardano.Multisig.Publish
     , bodyHashTagDatum
     )
 import Cardano.Multisig.Server
-    ( ServerDeps (..)
+    ( RuntimeConfig (..)
+    , ServerDeps (..)
     , applicationWith
     , errorEnvelope
+    , feeIndexerConfigFromRuntimeConfig
+    , readRuntimeConfigWith
+    , withServerBackgroundTasks
     )
 import Cardano.Multisig.Store
     ( Entry (..)
@@ -107,6 +113,11 @@ import Cardano.Multisig.Witness
 import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Ledger (ConwayTx)
 import Codec.Binary.Bech32 qualified as Bech32
+import Control.Concurrent
+    ( newEmptyMVar
+    , readMVar
+    , threadDelay
+    )
 import Data.Aeson
     ( Value
     , decode
@@ -187,6 +198,61 @@ spec = do
                     , "message" .= ("no such route" :: String)
                     ]
             ]
+
+    describe "Cardano.Multisig.Server fee indexer startup config" $ do
+        it "defaults fee indexer runtime settings from the store path" $ do
+            cfg <- readRuntimeConfigWith (lookupFixture baseRuntimeEnv)
+            rcFeeIndexerCheckpointDir cfg
+                `shouldBe` "/tmp/cardano-multisig-fee-indexer"
+            rcFeeIndexerByronEpochSlots cfg `shouldBe` 21_600
+            rcFeeIndexerRetryDelayMicros cfg `shouldBe` 30_000_000
+
+        it "honors explicit fee indexer runtime overrides" $ do
+            cfg <-
+                readRuntimeConfigWith
+                    ( lookupFixture
+                        $ baseRuntimeEnv
+                            <> [ ("FEE_INDEXER_CHECKPOINT_DIR", "/tmp/fee-checkpoints")
+                               , ("FEE_INDEXER_BYRON_EPOCH_SLOTS", "43200")
+                               , ("FEE_INDEXER_RETRY_DELAY_MICROS", "500000")
+                               ]
+                    )
+            rcFeeIndexerCheckpointDir cfg `shouldBe` "/tmp/fee-checkpoints"
+            rcFeeIndexerByronEpochSlots cfg `shouldBe` 43_200
+            rcFeeIndexerRetryDelayMicros cfg `shouldBe` 500_000
+
+        it
+            "builds fee indexer config from existing node, store, and schedule settings"
+            $ feeIndexerConfigFromRuntimeConfig
+                testRuntimeConfig
+                    { rcFeeIndexerCheckpointDir = "/tmp/checkpoints"
+                    , rcFeeIndexerByronEpochSlots = 43_200
+                    , rcFeeIndexerRetryDelayMicros = 500_000
+                    }
+            `shouldBe` FeeIndexerConfig
+                { ficSocketPath = "/tmp/node.socket"
+                , ficNetworkMagic = 42
+                , ficByronEpochSlots = 43_200
+                , ficFeeAddress = testAddr
+                , ficCheckpointDir = "/tmp/checkpoints"
+                , ficRetryDelayMicros = 500_000
+                }
+
+    describe "Cardano.Multisig.Server startup background tasks"
+        $ it
+            "starts liveness and fee indexer as sibling tasks scoped under the server action"
+        $ do
+            started <- newIORef Set.empty
+            blocker <- newEmptyMVar
+            let mark name = do
+                    atomicModifyIORef' started (\seen -> (Set.insert name seen, ()))
+                    readMVar blocker
+            withServerBackgroundTasks
+                (mark ("liveness" :: Text))
+                (mark "fee-indexer")
+                (waitForStarted started)
+            seen <- readIORef started
+            seen `shouldBe` Set.fromList ["liveness", "fee-indexer"]
 
     describe "Cardano.Multisig.Server publish HTTP routes" $ do
         it "returns the configured operator schedule" $ do
@@ -722,6 +788,48 @@ happyDeps =
             , mdNow = receiptTime
             , mdLiveness = liveLiveness
             }
+
+baseRuntimeEnv :: [(String, String)]
+baseRuntimeEnv =
+    [ ("CARDANO_NODE_SOCKET", "/tmp/node.socket")
+    , ("CARDANO_NODE_MAGIC", "42")
+    , ("CARDANO_MULTISIG_STORE", "/tmp/cardano-multisig")
+    , ("FEE_ADDRESS", Text.unpack (renderAddr testAddr))
+    , ("BASE_LOVELACE", "1000")
+    , ("RATE_LOVELACE_PER_SLOT", "10")
+    , ("TTL_HORIZON_SLOTS", "50")
+    ]
+
+lookupFixture :: [(String, String)] -> String -> IO (Maybe String)
+lookupFixture env name =
+    pure (lookup name env)
+
+testRuntimeConfig :: RuntimeConfig
+testRuntimeConfig =
+    RuntimeConfig
+        { rcN2c = N2cConfig{n2cSocket = "/tmp/node.socket", n2cMagic = 42}
+        , rcStorePath = "/tmp/cardano-multisig"
+        , rcSchedule = schedule
+        , rcFeeIndexerCheckpointDir = "/tmp/cardano-multisig-fee-indexer"
+        , rcFeeIndexerByronEpochSlots = 21_600
+        , rcFeeIndexerRetryDelayMicros = 30_000_000
+        }
+
+waitForStarted :: IORef (Set Text) -> IO ()
+waitForStarted started =
+    go (100 :: Int)
+  where
+    expected = Set.fromList ["liveness", "fee-indexer"]
+    go attempts = do
+        seen <- readIORef started
+        if expected `Set.isSubsetOf` seen
+            then pure ()
+            else
+                if attempts <= 0
+                    then expectationFailure ("backgrounds not started: " <> show seen)
+                    else do
+                        threadDelay 10_000
+                        go (attempts - 1)
 
 getJson :: ByteString -> MockDeps -> IO Value
 getJson path deps = do

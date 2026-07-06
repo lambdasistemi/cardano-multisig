@@ -5,9 +5,13 @@ module Cardano.Multisig.Server
     ( application
     , applicationWith
     , runServer
+    , RuntimeConfig (..)
     , ServerDeps (..)
     , operatorSchedule
     , errorEnvelope
+    , feeIndexerConfigFromRuntimeConfig
+    , readRuntimeConfigWith
+    , withServerBackgroundTasks
     ) where
 
 -- \|
@@ -43,6 +47,11 @@ import Cardano.Multisig.Chain
     , networkFromMagic
     , readPaymentConfirmation
     , withNodeProviderAndSubmitter
+    )
+import Cardano.Multisig.FeeIndexer
+    ( FeeIndexerConfig (..)
+    , FeeIndexerDeps (..)
+    , runFeeIndexerSupervisor
     )
 import Cardano.Multisig.Filter qualified as Filter
 import Cardano.Multisig.Liveness
@@ -859,12 +868,21 @@ runServer port network = do
                         , ldPhase1Ok = phase1Ok chainSource
                         , ldStore = store
                         }
-            withAsync
+                feeIndexerDeps =
+                    FeeIndexerDeps
+                        { fidStore = store
+                        , fidObserveTip = observeFeeIndexerTip
+                        }
+            withServerBackgroundTasks
                 (runLivenessMonitor defaultLivenessIntervalMicros livenessDeps)
-                $ \_ ->
-                    run port
-                        $ cors (const $ Just policy)
-                        $ applicationWith network (rcSchedule cfg) deps
+                ( runFeeIndexerSupervisor
+                    (feeIndexerConfigFromRuntimeConfig cfg)
+                    feeIndexerDeps
+                )
+                ( run port
+                    $ cors (const $ Just policy)
+                    $ applicationWith network (rcSchedule cfg) deps
+                )
   where
     policy =
         simpleCorsResourcePolicy
@@ -875,6 +893,17 @@ runServer port network = do
 defaultLivenessIntervalMicros :: Int
 defaultLivenessIntervalMicros =
     30 * 1_000_000
+
+withServerBackgroundTasks :: IO () -> IO () -> IO a -> IO a
+withServerBackgroundTasks liveness feeIndexer server =
+    withAsync liveness
+        $ const
+        $ withAsync feeIndexer
+        $ const server
+
+observeFeeIndexerTip :: SlotNo -> IO ()
+observeFeeIndexerTip _ =
+    pure ()
 
 inputUnspent :: Provider IO -> TxIn -> IO Bool
 inputUnspent provider txIn =
@@ -909,21 +938,45 @@ data RuntimeConfig = RuntimeConfig
     { rcN2c :: N2cConfig
     , rcStorePath :: FilePath
     , rcSchedule :: OperatorSchedule
+    , rcFeeIndexerCheckpointDir :: FilePath
+    , rcFeeIndexerByronEpochSlots :: Word64
+    , rcFeeIndexerRetryDelayMicros :: Int
     }
 
 readRuntimeConfig :: IO RuntimeConfig
-readRuntimeConfig = do
-    socket <- requireEnv "CARDANO_NODE_SOCKET"
-    magic <- requireReadEnv "CARDANO_NODE_MAGIC"
-    storePath <- requireEnv "CARDANO_MULTISIG_STORE"
-    feeAddressText <- Text.pack <$> requireEnv "FEE_ADDRESS"
+readRuntimeConfig =
+    readRuntimeConfigWith lookupEnv
+
+readRuntimeConfigWith
+    :: (String -> IO (Maybe String)) -> IO RuntimeConfig
+readRuntimeConfigWith lookupValue = do
+    socket <- requireEnvWith lookupValue "CARDANO_NODE_SOCKET"
+    magic <- requireReadEnvWith lookupValue "CARDANO_NODE_MAGIC"
+    storePath <- requireEnvWith lookupValue "CARDANO_MULTISIG_STORE"
+    feeAddressText <-
+        Text.pack <$> requireEnvWith lookupValue "FEE_ADDRESS"
     feeAddress <-
         case decodeBech32Address feeAddressText of
             Right addr -> pure addr
             Left err -> fail ("invalid FEE_ADDRESS: " <> err)
-    base <- requireReadEnv "BASE_LOVELACE"
-    rate <- requireReadEnv "RATE_LOVELACE_PER_SLOT"
-    horizon <- requireReadEnv "TTL_HORIZON_SLOTS"
+    base <- requireReadEnvWith lookupValue "BASE_LOVELACE"
+    rate <- requireReadEnvWith lookupValue "RATE_LOVELACE_PER_SLOT"
+    horizon <- requireReadEnvWith lookupValue "TTL_HORIZON_SLOTS"
+    checkpointDir <-
+        optionalEnvWith
+            lookupValue
+            "FEE_INDEXER_CHECKPOINT_DIR"
+            (storePath <> "-fee-indexer")
+    byronEpochSlots <-
+        optionalReadEnvWith
+            lookupValue
+            "FEE_INDEXER_BYRON_EPOCH_SLOTS"
+            21_600
+    retryDelayMicros <-
+        optionalReadEnvWith
+            lookupValue
+            "FEE_INDEXER_RETRY_DELAY_MICROS"
+            30_000_000
     let n2c = N2cConfig{n2cSocket = socket, n2cMagic = magic}
         schedule =
             OperatorSchedule
@@ -938,19 +991,61 @@ readRuntimeConfig = do
             { rcN2c = n2c
             , rcStorePath = storePath
             , rcSchedule = schedule
+            , rcFeeIndexerCheckpointDir = checkpointDir
+            , rcFeeIndexerByronEpochSlots = byronEpochSlots
+            , rcFeeIndexerRetryDelayMicros = retryDelayMicros
             }
 
-requireEnv :: String -> IO String
-requireEnv name = do
-    value <- lookupEnv name
+feeIndexerConfigFromRuntimeConfig :: RuntimeConfig -> FeeIndexerConfig
+feeIndexerConfigFromRuntimeConfig cfg =
+    FeeIndexerConfig
+        { ficSocketPath = n2cSocket (rcN2c cfg)
+        , ficNetworkMagic = n2cMagic (rcN2c cfg)
+        , ficByronEpochSlots = rcFeeIndexerByronEpochSlots cfg
+        , ficFeeAddress = osFeeAddress (rcSchedule cfg)
+        , ficCheckpointDir = rcFeeIndexerCheckpointDir cfg
+        , ficRetryDelayMicros = rcFeeIndexerRetryDelayMicros cfg
+        }
+
+requireEnvWith :: (String -> IO (Maybe String)) -> String -> IO String
+requireEnvWith lookupValue name = do
+    value <- lookupValue name
     case value of
         Just v
             | not (null v) -> pure v
         _ -> fail ("missing required environment variable " <> name)
 
-requireReadEnv :: Read a => String -> IO a
-requireReadEnv name = do
-    raw <- requireEnv name
+requireReadEnvWith
+    :: Read a => (String -> IO (Maybe String)) -> String -> IO a
+requireReadEnvWith lookupValue name = do
+    raw <- requireEnvWith lookupValue name
     case readMaybe raw of
         Just value -> pure value
         Nothing -> fail ("invalid numeric environment variable " <> name)
+
+optionalEnvWith
+    :: (String -> IO (Maybe String))
+    -> String
+    -> String
+    -> IO String
+optionalEnvWith lookupValue name fallback = do
+    value <- lookupValue name
+    pure $ case value of
+        Just v | not (null v) -> v
+        _ -> fallback
+
+optionalReadEnvWith
+    :: Read a
+    => (String -> IO (Maybe String))
+    -> String
+    -> a
+    -> IO a
+optionalReadEnvWith lookupValue name fallback = do
+    value <- lookupValue name
+    case value of
+        Just raw
+            | not (null raw) ->
+                case readMaybe raw of
+                    Just parsed -> pure parsed
+                    Nothing -> fail ("invalid numeric environment variable " <> name)
+        _ -> pure fallback
