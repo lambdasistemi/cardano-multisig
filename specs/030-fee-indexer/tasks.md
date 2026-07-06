@@ -65,20 +65,20 @@
 
 ## Slice 3 - Server Startup Wiring
 
-- [ ] T003-S3 Extend runtime config with fee-indexer checkpoint directory,
+- [X] T003-S3 Extend runtime config with fee-indexer checkpoint directory,
   Byron epoch slots, and retry delay only.
-- [ ] T003-S3 Build `FeeIndexerConfig` from existing node/store/operator
+- [X] T003-S3 Build `FeeIndexerConfig` from existing node/store/operator
   startup settings.
-- [ ] T003-S3 Start `runFeeIndexerSupervisor` as a sibling async to the
+- [X] T003-S3 Start `runFeeIndexerSupervisor` as a sibling async to the
   existing liveness monitor and preserve graceful shutdown.
-- [ ] T003-S3 Add focused startup/config coverage where the current test
+- [X] T003-S3 Add focused startup/config coverage where the current test
   harness can do so without opening a node socket.
-- [ ] T003-S3 Confirm `Server.hs` has startup wiring only: no route, publish,
+- [X] T003-S3 Confirm `Server.hs` has startup wiring only: no route, publish,
   request, response, fee-status, OpenAPI, or docs changes.
-- [ ] T003-S3 Run
+- [X] T003-S3 Run
   `nix develop --quiet -c just unit "Cardano.Multisig.Server"` and
   `./gate.sh`.
-- [ ] T003-S3 Commit as `feat: start fee indexer with server` with trailer
+- [X] T003-S3 Commit as `feat: start fee indexer with server` with trailer
   `Tasks: T003`.
 
 ## Slice 4 - Orchestrator-Owned Finalization
