@@ -26,8 +26,10 @@ metadata flags are `--json-metadata-no-schema` and `--metadata-json-file`.
 Docs should use those current flags while describing the same no-schema
 metadata contract requested by the issue.
 
-`just update-swagger` is not present in this repo. Q-001 asks the epic owner
-whether to treat that as a stale instruction or widen scope.
+`just update-swagger` is not present in this repo. Q-001 resolved this as a
+stale instruction: do not touch `justfile`, hand-edit `openapi/v1.yaml`, verify
+by direct review plus `./gate.sh`, and note the absence of an OpenAPI validator
+in the PR body.
 
 ## Design
 
@@ -133,9 +135,10 @@ nix develop --quiet -c just build-docs
 ./gate.sh
 ```
 
-If Q-001 is answered before this slice starts, apply that answer to the proof
-command. If not answered, log the absent `just update-swagger` recipe in WIP and
-use the proof above.
+Q-001 rejected adding `just update-swagger`; the OpenAPI YAML is hand-authored
+for this ticket. The worker must directly review the YAML shape and run the
+gate. If an existing validator is discovered, use it, but do not add new
+validation tooling in this child.
 
 Commit:
 

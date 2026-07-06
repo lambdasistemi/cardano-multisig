@@ -21,7 +21,7 @@
   `cardano-cli` no-schema example, and pay -> poll `fee-status` -> publish
   flow.
 - [ ] T002-S2 Run `nix develop --quiet -c just build-docs` and `./gate.sh`;
-  apply the Q-001 answer if it arrives before this slice starts.
+  do not add `just update-swagger` or any new OpenAPI validator in this child.
 - [ ] T002-S2 Commit as `docs: pin fee metadata contract in API docs` with
   trailer `Tasks: T002`.
 
