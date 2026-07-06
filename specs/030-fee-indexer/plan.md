@@ -11,6 +11,9 @@
   `Cardano.Multisig.FeeTag.decodeFeeTag`,
   `Cardano.Multisig.Store.FeePayment`, `storeUpsertFeePayment`,
   and `storeRollbackFeePaymentsFrom`.
+- Parent decision A from `/tmp/epic-26/ticket-30/inbox/NOTE-001` is binding:
+  fee-address payments with absent or undecodable fee tags are recorded as
+  malformed payments keyed by `TxIn`, not ignored.
 - Existing startup shape: `runServer` opens one node provider/submitter, opens
   one RocksDB store, starts `runLivenessMonitor` with `withAsync`, then runs
   Warp.
@@ -50,7 +53,11 @@ data FeeIndexerChainEvent
     = FeeIndexerRollForward FeeIndexerBlock SlotNo
     | FeeIndexerRollBackward SlotNo
 
-classifyFeeTx :: Addr -> SlotNo -> FeeIndexerTx -> [FeePayment]
+data FeeIndexResult
+    = FeeIndexPayment FeePayment
+    | FeeIndexMalformed TxIn SlotNo
+
+classifyFeeTx :: Addr -> SlotNo -> FeeIndexerTx -> [FeeIndexResult]
 runFeeIndexerOnce :: Monad m => FeeIndexerDeps m -> FeeIndexerChainEvent -> m ()
 runFeeIndexer :: FeeIndexerConfig -> FeeIndexerDeps IO -> IO ()
 runFeeIndexerSupervisor :: FeeIndexerConfig -> FeeIndexerDeps IO -> IO ()
@@ -76,7 +83,10 @@ For Shelley-family transactions extracted from a block:
   `Map Word64 Metadatum`, and pass it to `decodeFeeTag`;
 - for every output whose address equals `ficFeeAddress` and whose lovelace is
   positive, emit one `FeePayment` when the tag decodes;
-- emit nothing for wrong-address outputs or undecodable/missing metadata.
+- for every positive-lovelace fee-address output whose tag is absent or
+  undecodable, emit `FeeIndexMalformed txIn slot`;
+- emit nothing for wrong-address outputs, even if the transaction carries valid
+  metadata.
 
 The real block extractor can follow the pinned `cardano-node-clients`
 `UTxOIndexer.BlockExtract` pattern: `fromConsensusBlock`,
@@ -96,16 +106,17 @@ Production follower:
   be durable across process restart.
 - On cold start, offer `Origin`.
 - On warm start, offer the persisted point first.
-- On `intersectFound`, roll the store back to the intersected slot before
-  following.
+- On `intersectFound`, roll both attributed and malformed fee-payment stores
+  back to the intersected slot before following.
 - On `intersectNotFound` from a warm checkpoint, reset safely by rolling fee
-  payments back from slot 0 and then retrying from `Origin`; never replay from
-  genesis over a populated fee-payment set without first clearing indexed
-  payment rows.
+  payments and malformed payment rows back from slot 0 and then retrying from
+  `Origin`; never replay from genesis over populated indexed rows without first
+  clearing them.
 - On roll-forward, apply classified payments, persist the new checkpoint, and
   update the observed tip.
-- On roll-backward, call `storeRollbackFeePaymentsFrom rollbackSlot`, persist
-  the rollback point when it is concrete, and continue with `Progress`.
+- On roll-backward, call both `storeRollbackFeePaymentsFrom rollbackSlot` and
+  the malformed-payment rollback, persist the rollback point when it is
+  concrete, and continue with `Progress`.
 
 Supervisor:
 
@@ -114,6 +125,23 @@ Supervisor:
 - For synchronous exceptions, sleep `ficRetryDelayMicros` and retry forever.
 - Keep this local if importing `Cardano.Node.Client.N2C.Reconnect` would force
   unrelated tracer/probe configuration into this service.
+
+## Malformed Payment Store Details
+
+Add an additive store column family for malformed fee payments:
+
+- key: `TxIn`;
+- value: at least the containing `SlotNo`/`block_slot`, so rollback can delete
+  orphaned rows;
+- writes are independent of #29's attributed `FeePayment` rows and allowance
+  logic;
+- read API: `storeMalformedFeePayment :: TxIn -> m Bool` or an equivalent
+  `Maybe` read that #31 can use to return `fee_metadata_malformed`;
+- rollback API: remove malformed rows whose stored block slot is at or after
+  the rollback slot.
+
+Wire the new methods through `Store`, `StoreWithFilters`, and RocksDB tests in
+Slice 1 because the classifier result needs a concrete effect target.
 
 ## Runtime Configuration
 
@@ -129,38 +157,48 @@ matching, OpenAPI, docs, or publish failure behavior in this ticket.
 
 ## Slice Plan
 
-### Slice 1: Classifier and Mock Event Loop
+### Slice 1: Malformed Store, Classifier, and Mock Event Loop
 
 Worker-owned files:
 
 - `src/Cardano/Multisig/FeeIndexer.hs`
+- `src/Cardano/Multisig/Store.hs`
+- `src/Cardano/Multisig/Store/Columns.hs`
+- `src/Cardano/Multisig/Store/Codecs.hs`
+- `src/Cardano/Multisig/Store/RocksDB.hs`
 - `test/Cardano/Multisig/FeeIndexerSpec.hs`
+- `test/Cardano/Multisig/StoreSpec.hs`
 - `test/Main.hs`
 - `cardano-multisig.cabal`
 
 Work:
 
+- Add the additive malformed-payment store type/column/codecs, write/read
+  operations, and rollback operation. Do not change #29's existing allowance
+  semantics.
 - Add the new module with pure transaction/block classification types and
   `runFeeIndexerOnce`.
 - Add library exposure and test-suite registration.
 - Add RED tests for fee-address+valid-tag writes, wrong address ignored,
-  malformed or missing tag ignored, and multiple matching outputs producing
-  distinct `TxIn`s.
-- Add a mock chain event test proving roll-forward writes payments and rollback
-  calls `storeRollbackFeePaymentsFrom`.
+  malformed or missing tag recorded as malformed by `TxIn`, and multiple
+  matching outputs producing distinct `TxIn`s.
+- Add RocksDB/store tests proving malformed write/read and rollback.
+- Add a mock chain event test proving roll-forward writes both attributed
+  payments and malformed records, and rollback calls both rollback operations.
 - Do not add production ChainSync or server startup wiring yet.
 
 Focused proof:
 
 ```bash
 nix develop --quiet -c just unit "Cardano.Multisig.FeeIndexer"
+nix develop --quiet -c just unit "Cardano.Multisig.Store"
 ./gate.sh
 ```
 
 Commit:
 
 ```text
-feat: add fee payment classifier
+feat: record malformed fee payments
 
 Tasks: T001
 ```
@@ -178,11 +216,17 @@ Work:
 - Add the real `runFeeIndexer` implementation using `chain-follower` and
   `cardano-node-clients` ChainSync.
 - Add file-backed checkpoint save/load/list helpers inside `FeeIndexer`.
+- On roll-forward, apply classified attributed payments and malformed records,
+  persist checkpoint, and update observed tip.
+- On rollback and warm-intersection rewind, roll back both attributed payments
+  and malformed records from the target slot.
+- On warm `intersectNotFound`, clear both indexed row families from slot 0
+  before retrying from origin.
 - Add a supervised retry wrapper that catches synchronous transient failures
   and preserves async cancellation.
 - Add tests with an injected ChainSync runner proving warm resume points,
-  rollback store calls, safe reset when warm intersection is missing, and retry
-  after one transient failure.
+  rollback store calls for both row families, safe reset when warm intersection
+  is missing, and retry after one transient failure.
 - Keep server startup untouched in this slice.
 
 Focused proof:
