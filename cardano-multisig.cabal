@@ -64,6 +64,7 @@ library
     , async
     , base                                     <5
     , base16-bytestring
+    , bech32
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-allegra
@@ -117,6 +118,7 @@ test-suite unit-tests
     , async
     , base                       <5
     , base16-bytestring
+    , bech32
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-allegra
@@ -131,9 +133,12 @@ test-suite unit-tests
     , cardano-tx-tools:tx-build
     , containers
     , hspec                      <2.12
+    , http-types                 <0.13
     , microlens
     , mtl
     , ouroboros-network:api
     , temporary
     , text
     , time
+    , wai                        <3.3
+    , wai-extra
