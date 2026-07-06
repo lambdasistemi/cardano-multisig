@@ -16,11 +16,14 @@ plugins:
 
 markdown_extensions:
   - admonition
+  - attr_list
   - tables
   - footnotes
   - def_list
   - pymdownx.highlight
   - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -29,4 +32,11 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Architecture:
+      - architecture/index.md
+      - Trust model: architecture/trust-model.md
+      - Fees & economics: architecture/fees.md
+      - Fee discovery: architecture/fee-discovery.md
+      - Request lifecycle: architecture/lifecycle.md
+      - Components: architecture/components.md
   - API (/v1): api-v1.md
