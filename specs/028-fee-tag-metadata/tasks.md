@@ -2,14 +2,14 @@
 
 ## Slice 1 - Codec, Cabal Wiring, and Tests
 
-- [ ] T001-S1 Add `Cardano.Multisig.FeeTag` with `BodyHash`, label `9721`,
+- [X] T001-S1 Add `Cardano.Multisig.FeeTag` with `BodyHash`, label `9721`,
   key `body_hash`, `encodeFeeTag`, and `decodeFeeTag`.
-- [ ] T001-S1 Add cabal exposure/dependencies for the new module and tests.
-- [ ] T001-S1 Add focused tests for round-trip, malformed metadata, and the
+- [X] T001-S1 Add cabal exposure/dependencies for the new module and tests.
+- [X] T001-S1 Add focused tests for round-trip, malformed metadata, and the
   real-CLI no-schema CBOR golden.
-- [ ] T001-S1 Run
+- [X] T001-S1 Run
   `nix develop --quiet -c just unit "Cardano.Multisig.FeeTag"` and `./gate.sh`.
-- [ ] T001-S1 Commit as `feat: add fee tag metadata codec` with trailer
+- [X] T001-S1 Commit as `feat: add fee tag metadata codec` with trailer
   `Tasks: T001`.
 
 ## Slice 2 - OpenAPI and API Docs
