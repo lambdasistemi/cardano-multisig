@@ -89,6 +89,10 @@
             devnet-publish-smoke = devnetPublishSmokeCheck;
           };
           apps = {
+            cardano-multisig-server = {
+              type = "app";
+              program = pkgs.lib.getExe project.packages.cardano-multisig;
+            };
             devnet-publish-smoke = {
               type = "app";
               program = pkgs.lib.getExe devnetPublishSmokeApp;

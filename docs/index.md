@@ -20,6 +20,8 @@ accounts, no membership — a valid signature is the only credential.
 - **[API (/v1)](api-v1.md)** — the wire contract: who pays or signs at
   each step, backed by the checked-in
   [OpenAPI 3.1 document](https://github.com/lambdasistemi/cardano-multisig/blob/main/openapi/v1.yaml).
+- **[Devnet runbook](devnet-run.md)** — the operator environment for running
+  the server against a local devnet node.
 
 ## Key properties
 
@@ -37,3 +39,5 @@ accounts, no membership — a valid signature is the only credential.
 ```bash
 docker compose -f CD/docker-compose.yaml up
 ```
+
+For a live devnet node, use the [devnet runbook](devnet-run.md).
