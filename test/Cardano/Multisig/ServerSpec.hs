@@ -27,7 +27,6 @@ import Cardano.Ledger.Address
     )
 import Cardano.Ledger.Allegra.Scripts (ValidityInterval (..))
 import Cardano.Ledger.Api.Era (eraProtVerLow)
-import Cardano.Ledger.Api.Scripts.Data (Datum)
 import Cardano.Ledger.Api.Tx
     ( addrTxWitsL
     , bodyTxL
@@ -44,7 +43,6 @@ import Cardano.Ledger.BaseTypes
     , TxIx (..)
     )
 import Cardano.Ledger.Binary (serialize')
-import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Credential
     ( Credential (KeyHashObj)
@@ -66,13 +64,9 @@ import Cardano.Ledger.Keys
     , hashKey
     , signedDSIGN
     )
-import Cardano.Ledger.Mary.Value (MaryValue (..), MultiAsset (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Multisig.Chain
     ( N2cConfig (..)
-    , PaymentConfirmation (..)
-    , PaymentConfirmationEvidence (..)
-    , PaymentReadResult (..)
     )
 import Cardano.Multisig.FeeIndexer (FeeIndexerConfig (..))
 import Cardano.Multisig.Filter
@@ -84,7 +78,6 @@ import Cardano.Multisig.Publish
     ( OperatorSchedule (..)
     , PreflightResult (..)
     , PublishDeps (..)
-    , bodyHashTagDatum
     )
 import Cardano.Multisig.Server
     ( RuntimeConfig (..)
@@ -100,6 +93,7 @@ import Cardano.Multisig.Store
     , EntryId (..)
     , EntryStatus (..)
     , FeeAllowance (..)
+    , MalformedFeePayment (..)
     , Receipt (..)
     , Store (..)
     , entryIdFromTx
@@ -317,12 +311,22 @@ spec = do
                         ]
                     )
 
+        it
+            "admits an entry without a fee_payment when final allowance is sufficient"
+            $ do
+                let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                response <-
+                    postJson
+                        "/v1/entries"
+                        happyDeps{mdAllowance = FeeAllowance 1_250 5 False}
+                        (object ["transaction" .= txHexText tx])
+                simpleStatus response `shouldBe` status201
+
         it "maps insufficient fee failures to HTTP 402" $ do
             let tx = testTx (SJust (SlotNo 125)) requiredSigners
                 deps =
                     happyDeps
-                        { mdPayment =
-                            payment tx 1_249 (bodyHashTagDatum (entryIdFromTx tx))
+                        { mdAllowance = FeeAllowance 1_249 5 False
                         }
             response <-
                 postJson
@@ -334,6 +338,89 @@ spec = do
                         ]
                     )
             simpleStatus response `shouldBe` status402
+            decode (simpleBody response)
+                `shouldBe` Just
+                    ( feeError
+                        "fee_insufficient"
+                        "fee allowance is insufficient"
+                        ( object
+                            [ "paid_lovelace" .= (1_249 :: Word64)
+                            , "required_lovelace" .= (1_250 :: Integer)
+                            ]
+                        )
+                    )
+
+        it "maps absent allowance without a payment hint to fee_not_seen" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+            response <-
+                postJson
+                    "/v1/entries"
+                    happyDeps{mdAllowance = FeeAllowance 0 5 False}
+                    (object ["transaction" .= txHexText tx])
+            simpleStatus response `shouldBe` status402
+            decode (simpleBody response)
+                `shouldBe` Just
+                    ( feeError
+                        "fee_not_seen"
+                        "fee allowance was not seen"
+                        ( object
+                            [ "paid_lovelace" .= (0 :: Word64)
+                            , "required_lovelace" .= (1_250 :: Integer)
+                            ]
+                        )
+                    )
+
+        it "maps unconfirmed allowance to fee_unconfirmed" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+            response <-
+                postJson
+                    "/v1/entries"
+                    happyDeps{mdAllowance = FeeAllowance 0 5 True}
+                    (object ["transaction" .= txHexText tx])
+            simpleStatus response `shouldBe` status402
+            decode (simpleBody response)
+                `shouldBe` Just
+                    ( feeError
+                        "fee_unconfirmed"
+                        "fee allowance is not yet confirmed"
+                        ( object
+                            [ "required_depth" .= (5 :: Word)
+                            , "paid_lovelace" .= (0 :: Word64)
+                            , "required_lovelace" .= (1_250 :: Integer)
+                            ]
+                        )
+                    )
+
+        it
+            "maps malformed optional payment metadata to fee_metadata_malformed"
+            $ do
+                let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                    feePayment = mkTxIn 9
+                    malformed =
+                        MalformedFeePayment
+                            { malformedFeePaymentTxIn = feePayment
+                            , malformedFeePaymentBlockSlot = SlotNo 99
+                            }
+                response <-
+                    postJson
+                        "/v1/entries"
+                        happyDeps
+                            { mdAllowance = FeeAllowance 0 5 False
+                            , mdMalformed = Just malformed
+                            }
+                        ( object
+                            [ "transaction" .= txHexText tx
+                            , "fee_payment" .= renderTxIn feePayment
+                            ]
+                        )
+                simpleStatus response `shouldBe` status402
+                decode (simpleBody response)
+                    `shouldBe` Just
+                        ( feeError
+                            "fee_metadata_malformed"
+                            "fee payment metadata is malformed"
+                            (object ["fee_payment" .= renderTxIn feePayment])
+                        )
 
         it "maps duplicate entry ids to HTTP 409" $ do
             let tx = testTx (SJust (SlotNo 125)) requiredSigners
@@ -761,7 +848,8 @@ spec = do
 
 data MockDeps = MockDeps
     { mdTip :: SlotNo
-    , mdPayment :: PaymentConfirmation
+    , mdAllowance :: FeeAllowance
+    , mdMalformed :: Maybe MalformedFeePayment
     , mdPreflight :: PreflightResult
     , mdEntries :: Map EntryId Entry
     , mdReceipts :: Map EntryId Receipt
@@ -774,20 +862,19 @@ data MockDeps = MockDeps
 
 happyDeps :: MockDeps
 happyDeps =
-    let tx = testTx (SJust (SlotNo 125)) requiredSigners
-    in  MockDeps
-            { mdTip = SlotNo 100
-            , mdPayment =
-                payment tx 1_250 (bodyHashTagDatum (entryIdFromTx tx))
-            , mdPreflight = PreflightAccepted
-            , mdEntries = mempty
-            , mdReceipts = mempty
-            , mdSignerFilters = mempty
-            , mdSubmitResult = Right ()
-            , mdSubmitted = mempty
-            , mdNow = receiptTime
-            , mdLiveness = liveLiveness
-            }
+    MockDeps
+        { mdTip = SlotNo 100
+        , mdAllowance = FeeAllowance 1_250 5 False
+        , mdMalformed = Nothing
+        , mdPreflight = PreflightAccepted
+        , mdEntries = mempty
+        , mdReceipts = mempty
+        , mdSignerFilters = mempty
+        , mdSubmitResult = Right ()
+        , mdSubmitted = mempty
+        , mdNow = receiptTime
+        , mdLiveness = liveLiveness
+        }
 
 baseRuntimeEnv :: [(String, String)]
 baseRuntimeEnv =
@@ -917,7 +1004,6 @@ mockPublishDeps :: IORef MockDeps -> PublishDeps IO
 mockPublishDeps ref =
     PublishDeps
         { pdReadTip = mdTip <$> readIORef ref
-        , pdReadPayment = \_ -> PaymentReadResolved . mdPayment <$> readIORef ref
         , pdPreflight = \_ -> mdPreflight <$> readIORef ref
         , pdStore =
             StoreWithFilters
@@ -986,10 +1072,11 @@ mockPublishDeps ref =
                     Map.lookup signer . mdSignerFilters <$> readIORef ref
                 , storeUpsertFeePayment = \_ -> pure ()
                 , storeRollbackFeePaymentsFrom = \_ -> pure ()
-                , storeAllowanceFor = \_ _ depth ->
-                    pure (FeeAllowance 0 depth False)
+                , storeAllowanceFor = \_ _ depth -> do
+                    allowance <- mdAllowance <$> readIORef ref
+                    pure allowance{allowanceRequiredDepth = depth}
                 , storePutMalformedFeePayment = \_ -> pure ()
-                , storeMalformedFeePayment = \_ -> pure Nothing
+                , storeMalformedFeePayment = \_ -> mdMalformed <$> readIORef ref
                 , storeRollbackMalformedFeePaymentsFrom = \_ -> pure ()
                 }
         }
@@ -1042,6 +1129,17 @@ receiptJson Receipt{..} =
         , "submitted_at" .= receiptSubmittedAt
         ]
 
+feeError :: Text -> Text -> Value -> Value
+feeError code message details =
+    object
+        [ "error"
+            .= object
+                [ "code" .= code
+                , "message" .= message
+                , "details" .= details
+                ]
+        ]
+
 liveLiveness :: EntryLiveness
 liveLiveness =
     EntryLiveness
@@ -1062,23 +1160,6 @@ entryLivenessJson EntryLiveness{..} =
         [ "inputs_unspent" .= elInputsUnspent
         , "phase1_ok" .= elPhase1Ok
         ]
-
-payment
-    :: ConwayTx -> Integer -> Datum ConwayEra -> PaymentConfirmation
-payment tx lovelace datum =
-    PaymentConfirmation
-        { pcRequestedTxIn = mkTxIn 9
-        , pcValue = MaryValue (Coin lovelace) (MultiAsset mempty)
-        , pcAddress = testAddr
-        , pcDatum = datum
-        , pcEvidence =
-            PaymentConfirmationEvidence
-                { pceLedgerTipSlot = SlotNo 100
-                , pceExactDepth = Nothing
-                }
-        }
-  where
-    _ = tx
 
 testTx
     :: StrictMaybe SlotNo

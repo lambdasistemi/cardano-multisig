@@ -53,8 +53,8 @@ then `./gate.sh`.
 
 ## Finalization
 
-- Verify grep checks: no forbidden legacy API package string, no
-  `bodyHashTagDatum`, no `fee_tag_mismatch`.
+- Verify grep checks: no forbidden legacy API package string, no old datum-tag
+  helper name, and no old tag-mismatch reason string.
 - Verify every task in `tasks.md` is checked and every behavior-changing commit
   carries matching `Tasks:` trailers.
 - Ensure PR body contains `Closes #31`.

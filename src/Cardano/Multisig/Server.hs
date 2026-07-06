@@ -62,6 +62,8 @@ import Cardano.Multisig.Liveness
     )
 import Cardano.Multisig.Publish
     ( FeeQuote (..)
+    , FeeReason (..)
+    , FeeStatus (..)
     , OperatorSchedule (..)
     , PreflightResult (..)
     , PublishDeps (..)
@@ -300,7 +302,7 @@ entriesHandler schedule deps request respond = do
         Left err ->
             respond $ failureResponse status422 "invalid_request" err
         Right PublishBody{..} ->
-            case parseTxIn pbFeePayment of
+            case traverse parseTxIn pbFeePayment of
                 Left err ->
                     respond $ failureResponse status422 "invalid_fee_payment" err
                 Right feePayment -> do
@@ -330,7 +332,7 @@ instance FromJSON FeeQuoteBody where
 
 data PublishBody = PublishBody
     { pbTransaction :: Text
-    , pbFeePayment :: Text
+    , pbFeePayment :: Maybe Text
     }
 
 instance FromJSON PublishBody where
@@ -338,7 +340,7 @@ instance FromJSON PublishBody where
         withObject "PublishRequest" $ \obj ->
             PublishBody
                 <$> obj .: "transaction"
-                <*> obj .: "fee_payment"
+                <*> obj .:? "fee_payment"
 
 newtype WitnessBody = WitnessBody
     { wbWitness :: Text
@@ -379,7 +381,7 @@ feeQuoteJson schedule FeeQuote{..} =
         [ "body_hash" .= renderEntryId qBodyHash
         , "required_fee_lovelace" .= qRequiredFeeLovelace
         , "fee_address" .= renderAddr schedule qFeeAddress
-        , "tag" .= renderEntryId qBodyHash
+        , "tag" .= qTag
         , "invalid_hereafter" .= renderSlot qInvalidHereafter
         ]
 
@@ -727,23 +729,8 @@ witnessFailureResponse = \case
 publishFailureResponse :: PublishFailure -> Response
 publishFailureResponse failure =
     case failure of
-        PublishFeeMissing ->
-            failureResponse status402 "fee_missing" "fee payment not found"
-        PublishFeeWrongAddress ->
-            failureResponse
-                status402
-                "fee_wrong_address"
-                "fee paid to wrong address"
-        PublishFeeTagMismatch ->
-            failureResponse
-                status402
-                "fee_tag_mismatch"
-                "fee tag does not match body hash"
-        PublishFeeInsufficient{} ->
-            failureResponse
-                status402
-                "fee_insufficient"
-                "fee payment is insufficient"
+        PublishFeeRejected status ->
+            feeFailureResponse status
         PublishDuplicate{} ->
             failureResponse status409 "duplicate" "entry already exists"
         PublishDecodeFailed reason ->
@@ -764,6 +751,66 @@ publishFailureResponse failure =
 failureResponse :: Status -> String -> String -> Response
 failureResponse status code message =
     jsonResponse status (errorEnvelope code message)
+
+failureResponseWithDetails
+    :: Status -> Text -> Text -> Value -> Response
+failureResponseWithDetails status code message details =
+    jsonResponse status
+        $ object
+            [ "error"
+                .= object
+                    [ "code" .= code
+                    , "message" .= message
+                    , "details" .= details
+                    ]
+            ]
+
+feeFailureResponse :: FeeStatus -> Response
+feeFailureResponse status =
+    failureResponseWithDetails
+        status402
+        (feeReasonCode (feeStatusReason status))
+        (feeReasonMessage (feeStatusReason status))
+        (feeFailureDetails status)
+
+feeReasonCode :: FeeReason -> Text
+feeReasonCode = \case
+    FeeNotSeen -> "fee_not_seen"
+    FeeUnconfirmed -> "fee_unconfirmed"
+    FeeInsufficient -> "fee_insufficient"
+    FeeMetadataMalformed -> "fee_metadata_malformed"
+
+feeReasonMessage :: FeeReason -> Text
+feeReasonMessage = \case
+    FeeNotSeen -> "fee allowance was not seen"
+    FeeUnconfirmed -> "fee allowance is not yet confirmed"
+    FeeInsufficient -> "fee allowance is insufficient"
+    FeeMetadataMalformed -> "fee payment metadata is malformed"
+
+feeFailureDetails :: FeeStatus -> Value
+feeFailureDetails status =
+    case feeStatusReason status of
+        FeeMetadataMalformed ->
+            object
+                [ "fee_payment"
+                    .= maybe ("" :: Text) renderTxIn (feeStatusMalformedPayment status)
+                ]
+        FeeUnconfirmed ->
+            object
+                [ "required_depth" .= feeStatusRequiredDepth status
+                , "paid_lovelace" .= feeStatusPaidLovelace status
+                , "required_lovelace" .= feeStatusRequiredLovelace status
+                ]
+        FeeInsufficient ->
+            commonDetails
+        FeeNotSeen ->
+            commonDetails
+  where
+    commonDetails =
+        object
+            [ "paid_lovelace" .= feeStatusPaidLovelace status
+            , "required_lovelace" .= feeStatusRequiredLovelace status
+            ]
 
 notImplemented :: Value
 notImplemented =
@@ -814,6 +861,10 @@ renderEntryId (EntryId (TxId safeHash)) =
         $ hashToBytes
         $ extractHash safeHash
 
+renderTxIn :: TxIn -> Text
+renderTxIn (TxIn txId (TxIx ix)) =
+    renderEntryId (EntryId txId) <> "#" <> Text.pack (show ix)
+
 renderKeyHashes :: Set (KeyHash Guard) -> [Text]
 renderKeyHashes =
     fmap renderKeyHash . Set.toAscList
@@ -848,7 +899,6 @@ runServer port network = do
                     PublishDeps
                         { pdReadTip =
                             ledgerTipSlot <$> queryLedgerSnapshot provider
-                        , pdReadPayment = readPaymentConfirmation provider
                         , pdPreflight =
                             preflightResult chainSource
                         , pdStore = store

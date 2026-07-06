@@ -95,7 +95,6 @@ library
     , microlens
     , ouroboros-consensus
     , ouroboros-network:api
-    , plutus-ledger-api
     , rocksdb-haskell-jprupp
     , rocksdb-kv-transactions
     , rocksdb-kv-transactions:kv-transactions
