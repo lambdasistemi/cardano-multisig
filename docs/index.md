@@ -10,6 +10,10 @@ accounts, no membership — a valid signature is the only credential.
 
 ## Design
 
+- **[Architecture](architecture/index.md)** — the reasoned walkthrough of
+  the design: the trust model, the fee mechanics, how the service discovers
+  a payment, the request lifecycle, and the load-bearing decisions worth
+  pushing back on.
 - **Governing document:** the
   [constitution](https://github.com/lambdasistemi/cardano-multisig/blob/main/.specify/memory/constitution.md)
   fixes what the service is and must never become.
