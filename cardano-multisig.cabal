@@ -49,6 +49,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Cardano.Multisig.Chain
+    Cardano.Multisig.FeeIndexer
     Cardano.Multisig.FeeTag
     Cardano.Multisig.Filter
     Cardano.Multisig.Liveness
@@ -114,6 +115,7 @@ test-suite unit-tests
   main-is:        Main.hs
   other-modules:
     Cardano.Multisig.ChainSpec
+    Cardano.Multisig.FeeIndexerSpec
     Cardano.Multisig.FeeTagSpec
     Cardano.Multisig.FilterSpec
     Cardano.Multisig.LivenessSpec

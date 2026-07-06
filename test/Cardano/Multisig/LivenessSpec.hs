@@ -161,6 +161,9 @@ mockLivenessDeps =
                 , storeRollbackFeePaymentsFrom = \_ -> pure ()
                 , storeAllowanceFor = \_ _ depth ->
                     pure (FeeAllowance 0 depth False)
+                , storePutMalformedFeePayment = \_ -> pure ()
+                , storeMalformedFeePayment = \_ -> pure Nothing
+                , storeRollbackMalformedFeePaymentsFrom = \_ -> pure ()
                 }
         }
 

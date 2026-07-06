@@ -48,6 +48,7 @@ import Cardano.Multisig.Store
     , EntryStatus (..)
     , FeeAllowance (..)
     , FeePayment (..)
+    , MalformedFeePayment (..)
     , Receipt (..)
     , Store (..)
     , entryIdFromTx
@@ -182,6 +183,31 @@ spec =
                 storeAllowanceFor store bodyHash (SlotNo 12) 5
                     `shouldReturn` FeeAllowance 0 5 True
 
+        it "stores malformed fee payments by tx input"
+            $ withStore
+            $ \store -> do
+                let malformed = testMalformedFeePayment 8 12
+                storePutMalformedFeePayment store malformed
+                storeMalformedFeePayment store (malformedFeePaymentTxIn malformed)
+                    `shouldReturn` Just malformed
+
+        it "rolls back malformed fee payments after the rollback slot exactly"
+            $ withStore
+            $ \store -> do
+                let kept = testMalformedFeePayment 8 10
+                    alsoKept = testMalformedFeePayment 9 11
+                    stale = testMalformedFeePayment 10 12
+                storePutMalformedFeePayment store kept
+                storePutMalformedFeePayment store alsoKept
+                storePutMalformedFeePayment store stale
+                storeRollbackMalformedFeePaymentsFrom store (SlotNo 11)
+                storeMalformedFeePayment store (malformedFeePaymentTxIn kept)
+                    `shouldReturn` Just kept
+                storeMalformedFeePayment store (malformedFeePaymentTxIn alsoKept)
+                    `shouldReturn` Just alsoKept
+                storeMalformedFeePayment store (malformedFeePaymentTxIn stale)
+                    `shouldReturn` Nothing
+
 withStore :: (Store IO -> IO a) -> IO a
 withStore action =
     withSystemTempDirectory "cardano-multisig-store" $ \dir ->
@@ -269,6 +295,13 @@ testFeePayment bodyHash txIn lovelace slot =
         , feePaymentTxIn = mkTxIn txIn
         , feePaymentLovelace = lovelace
         , feePaymentBlockSlot = SlotNo slot
+        }
+
+testMalformedFeePayment :: Word -> Word64 -> MalformedFeePayment
+testMalformedFeePayment txIn slot =
+    MalformedFeePayment
+        { malformedFeePaymentTxIn = mkTxIn txIn
+        , malformedFeePaymentBlockSlot = SlotNo slot
         }
 
 mkHash32 :: (HashAlgorithm h) => Word8 -> Hash h a
