@@ -31,12 +31,12 @@
 
 ## Slice 2 - Orchestrator-Owned Finalization
 
-- [ ] T002-S2 ORCHESTRATOR-OWNED Verify every implementation task is checked
+- [X] T002-S2 ORCHESTRATOR-OWNED Verify every implementation task is checked
   and rerun `./gate.sh` at HEAD.
-- [ ] T002-S2 ORCHESTRATOR-OWNED Verify GitHub CI for PR #34 is green and log
+- [X] T002-S2 ORCHESTRATOR-OWNED Verify GitHub CI for PR #34 is green and log
   `CI-PASS`.
-- [ ] T002-S2 ORCHESTRATOR-OWNED Update PR #34 body with delivered behavior,
+- [X] T002-S2 ORCHESTRATOR-OWNED Update PR #34 body with delivered behavior,
   tests, and the hard-rule grep evidence.
-- [ ] T002-S2 ORCHESTRATOR-OWNED Drop `gate.sh`, commit
+- [X] T002-S2 ORCHESTRATOR-OWNED Drop `gate.sh`, commit
   `chore: drop gate.sh (ready for review)`, and mark PR #34 ready.
-- [ ] T002-S2 ORCHESTRATOR-OWNED Append `READY` and `COMPLETE`; do not merge.
+- [X] T002-S2 ORCHESTRATOR-OWNED Append `READY` and `COMPLETE`; do not merge.
