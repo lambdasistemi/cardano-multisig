@@ -2,13 +2,13 @@
 
 ## Slice 1 - Witness Core
 
-- [ ] T014-S1 Add `Cardano.Multisig.Witness` with detached witness decode,
+- [X] T014-S1 Add `Cardano.Multisig.Witness` with detached witness decode,
   signature verification, duplicate detection, status/missing helpers, and
   ledger witness-set assembly.
-- [ ] T014-S1 Add unit tests for invalid signature, non-required key,
+- [X] T014-S1 Add unit tests for invalid signature, non-required key,
   duplicate detection, valid witness acceptance, ready status, and assembly.
-- [ ] T014-S1 Update the cabal module lists needed by the new module/tests.
-- [ ] T014-S1 Run the focused witness tests and `./gate.sh`.
+- [X] T014-S1 Update the cabal module lists needed by the new module/tests.
+- [X] T014-S1 Run the focused witness tests and `./gate.sh`.
 
 ## Slice 2 - Read And Collect Routes
 

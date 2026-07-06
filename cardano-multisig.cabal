@@ -56,6 +56,7 @@ library
     Cardano.Multisig.Store.Columns
     Cardano.Multisig.Store.RocksDB
     Cardano.Multisig.Version
+    Cardano.Multisig.Witness
 
   other-modules:   Paths_cardano_multisig
   autogen-modules: Paths_cardano_multisig
@@ -112,6 +113,7 @@ test-suite unit-tests
     Cardano.Multisig.PublishSpec
     Cardano.Multisig.ServerSpec
     Cardano.Multisig.StoreSpec
+    Cardano.Multisig.WitnessSpec
 
   build-depends:
     , aeson                      <2.3
