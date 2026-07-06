@@ -27,12 +27,12 @@
 
 ## Slice 3 - Orchestrator-Owned Finalization
 
-- [ ] T003-S3 ORCHESTRATOR-OWNED Verify every implementation task is checked
+- [X] T003-S3 ORCHESTRATOR-OWNED Verify every implementation task is checked
   and rerun `./gate.sh` at HEAD.
-- [ ] T003-S3 ORCHESTRATOR-OWNED Verify GitHub CI for PR #33 is green.
-- [ ] T003-S3 ORCHESTRATOR-OWNED Update PR #33 body with delivered behavior,
+- [X] T003-S3 ORCHESTRATOR-OWNED Verify GitHub CI for PR #33 is green.
+- [X] T003-S3 ORCHESTRATOR-OWNED Update PR #33 body with delivered behavior,
   tests, and any Q-001 resolution.
-- [ ] T003-S3 ORCHESTRATOR-OWNED Drop `gate.sh`, commit
+- [X] T003-S3 ORCHESTRATOR-OWNED Drop `gate.sh`, commit
   `chore: drop gate.sh (ready for review)`, and mark PR #33 ready.
-- [ ] T003-S3 ORCHESTRATOR-OWNED Append `READY` and `COMPLETE` status lines;
+- [X] T003-S3 ORCHESTRATOR-OWNED Append `READY` and `COMPLETE` status lines;
   do not merge.
