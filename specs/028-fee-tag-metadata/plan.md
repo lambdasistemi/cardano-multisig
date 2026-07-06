@@ -12,7 +12,8 @@
   `Cardano.Ledger.Shelley.TxAuxData.Metadatum`
 
 Q-002 resolved a cabal solver conflict and is binding for this ticket and the
-later indexer child: do not add `cardano-api`, do not change Nix or source pins,
+later indexer child: do not add the forbidden high-level API package, do not
+change Nix or source pins,
 and implement the agreement surface with the ledger metadata map consumed by
 the indexer:
 
@@ -173,8 +174,9 @@ Work:
 - The golden test can become circular if it only uses the codec under test.
   Control: record the actual `cardano-cli` command used to produce the golden
   in the test or comments and compare bytes against the checked-in golden.
-- Adding `cardano-api` is forbidden for this child after Q-002 because it does
-  not solve against the current pins. Control: use ledger `Metadatum` only and
+- Adding the forbidden high-level API package is disallowed for this child after
+  Q-002 because it does not solve against the current pins. Control: use ledger
+  `Metadatum` only and
   do not edit `cabal.project`, `flake.nix`, `flake.lock`, or other pins.
 - Documentation can drift from codec constants. Control: Slice 2 text must use
   the same label and key names as `FeeTag`; final PR body calls out both.
