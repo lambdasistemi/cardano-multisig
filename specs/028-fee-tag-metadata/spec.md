@@ -25,9 +25,10 @@ that later children consume.
   text key `body_hash`, whose value is the transaction body hash as 64-character
   lowercase hex text.
 - FR-003: The Haskell API MUST provide
-  `encodeFeeTag :: BodyHash -> TxMetadata` and
-  `decodeFeeTag :: TxMetadata -> Maybe BodyHash` from
-  `Cardano.Multisig.FeeTag`.
+  `encodeFeeTag :: BodyHash -> FeeMetadata` and
+  `decodeFeeTag :: FeeMetadata -> Maybe BodyHash` from
+  `Cardano.Multisig.FeeTag`, where `FeeMetadata` is the ledger metadata map
+  consumed by the later indexer child: `Map Word64 Metadatum`.
 - FR-004: In this codebase, `BodyHash` MUST be the same semantic value as the
   existing `EntryId` body-hash type. The new module may expose a type alias so
   the issue contract uses the requested name without duplicating storage types.
@@ -47,8 +48,8 @@ that later children consume.
   { "9721": { "body_hash": "<64 lowercase hex body hash>" } }
   ```
 
-  The encoded `TxMetadata` from `encodeFeeTag` MUST match that golden byte for
-  byte.
+  The encoded ledger metadata from `encodeFeeTag` MUST match that golden byte
+  for byte.
 - FR-010: `openapi/v1.yaml` MUST pin `FeeSchedule.tag_field` to the exact label
   and map convention, document fee address semantics, add
   `GET /fee-status/{id}`, define `FeeStatus`, define `FeeReason` with
@@ -60,8 +61,9 @@ that later children consume.
 
 ## Acceptance Criteria
 
-- AC-001: `Cardano.Multisig.FeeTag` builds with `-Werror` and exposes the codec
-  contract named in the issue.
+- AC-001: `Cardano.Multisig.FeeTag` builds with `-Werror` and exposes the
+  ledger-metadata codec contract consumed by the later indexer and publish
+  children.
 - AC-002: Focused tests for `Cardano.Multisig.FeeTag` pass, including
   round-trip, malformed-input, and CLI-CBOR golden checks.
 - AC-003: OpenAPI and docs describe the same label, key, body-hash hex

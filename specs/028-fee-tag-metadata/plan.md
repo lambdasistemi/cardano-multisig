@@ -8,18 +8,19 @@
 - Parent epic: #26
 - Child ticket: #28
 - Current body-hash type: `Cardano.Multisig.Store.EntryId`
-- Cardano metadata API in the stack: `cardano-api-11.0.0.0`
+- Fee metadata API in the stack:
+  `Cardano.Ledger.Shelley.TxAuxData.Metadatum`
 
-The current package does not depend on `cardano-api`, so the codec slice owns
-the cabal dependency addition. Local source inspection confirms the needed API
-in `Cardano.Api.Tx.Internal.TxMetadata`:
+Q-002 resolved a cabal solver conflict and is binding for this ticket and the
+later indexer child: do not add `cardano-api`, do not change Nix or source pins,
+and implement the agreement surface with the ledger metadata map consumed by
+the indexer:
 
-- `TxMetadata`
-- `TxMetadataValue (TxMetaMap, TxMetaText, ...)`
-- `makeTransactionMetadata`
-- `metadataFromJson TxMetadataJsonNoSchema`
-- `metadataValueToJsonNoSchema`
-- `SerialiseAsCBOR (serialiseToCBOR)`
+```haskell
+type FeeMetadata = Map Word64 Metadatum
+encodeFeeTag :: BodyHash -> FeeMetadata
+decodeFeeTag :: FeeMetadata -> Maybe BodyHash
+```
 
 The current `cardano-cli` in the local Nix closure is 11.0.0.0. Its no-schema
 metadata flags are `--json-metadata-no-schema` and `--metadata-json-file`.
@@ -38,6 +39,7 @@ Add `Cardano.Multisig.FeeTag` as a narrow contract module:
 ```haskell
 module Cardano.Multisig.FeeTag
     ( BodyHash
+    , FeeMetadata
     , feeTagLabel
     , feeTagBodyHashKey
     , encodeFeeTag
@@ -49,13 +51,12 @@ module Cardano.Multisig.FeeTag
 better local type. The encoding is:
 
 ```haskell
-makeTransactionMetadata $
-    Map.singleton
-        9721
-        ( TxMetaMap
-            [ (TxMetaText "body_hash", TxMetaText "<64 lowercase hex>")
-            ]
-        )
+Map.singleton
+    9721
+    ( Map
+        [ (S "body_hash", S "<64 lowercase hex>")
+        ]
+    )
 ```
 
 Rendering/parsing the body hash should reuse the existing ledger hash pattern:
@@ -84,7 +85,8 @@ Work:
 
 - Add the `FeeTag` module with the label/key constants and encode/decode
   functions.
-- Add `cardano-api` to the library and test dependencies if needed.
+- Add `cardano-ledger-shelley` to the library and test dependencies as needed
+  for `Metadatum`.
 - Expose `Cardano.Multisig.FeeTag` in the library stanza.
 - Add `FeeTagSpec` to `other-modules` and `test/Main.hs`.
 - Write RED first: round-trip property with explicit `genBodyHash`, malformed
@@ -168,12 +170,11 @@ Work:
 
 ## Risks and Controls
 
-- The golden test can become circular if it only uses `cardano-api` JSON
-  conversion. Control: record the actual `cardano-cli` command used to produce
-  the golden in the test or comments and compare bytes against the checked-in
-  golden.
-- `cardano-api` may not be visible until it is added to `cardano-multisig.cabal`.
-  Control: make the dependency addition part of Slice 1 and prove through the
-  focused test before running the full gate.
+- The golden test can become circular if it only uses the codec under test.
+  Control: record the actual `cardano-cli` command used to produce the golden
+  in the test or comments and compare bytes against the checked-in golden.
+- Adding `cardano-api` is forbidden for this child after Q-002 because it does
+  not solve against the current pins. Control: use ledger `Metadatum` only and
+  do not edit `cabal.project`, `flake.nix`, `flake.lock`, or other pins.
 - Documentation can drift from codec constants. Control: Slice 2 text must use
   the same label and key names as `FeeTag`; final PR body calls out both.
