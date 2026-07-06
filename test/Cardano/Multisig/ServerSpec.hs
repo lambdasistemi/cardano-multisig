@@ -76,16 +76,19 @@ import Cardano.Multisig.Publish
     , bodyHashTagDatum
     )
 import Cardano.Multisig.Server
-    ( applicationWith
+    ( ServerDeps (..)
+    , applicationWith
     , errorEnvelope
     )
 import Cardano.Multisig.Store
     ( Entry (..)
     , EntryId (..)
     , EntryStatus (..)
+    , Receipt (..)
     , Store (..)
     , entryIdFromTx
     )
+import Cardano.Multisig.Witness (assembleEntryTx)
 import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Ledger (ConwayTx)
 import Codec.Binary.Bech32 qualified as Bech32
@@ -113,6 +116,11 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
+import Data.Time.Clock
+    ( UTCTime
+    , addUTCTime
+    )
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Word (Word64, Word8)
 import Lens.Micro ((&), (.~), (^.))
 import Network.HTTP.Types
@@ -431,11 +439,96 @@ spec = do
                         ]
                     )
 
+    describe "Cardano.Multisig.Server submit and receipt HTTP routes" $ do
+        it "returns 409 when submitting a non-ready entry" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                entryId = entryIdFromTx tx
+                deps =
+                    happyDeps
+                        { mdEntries = Map.singleton entryId (storedEntry tx)
+                        }
+            response <- postJson (submitPath entryId) deps (object [])
+            simpleStatus response `shouldBe` status409
+
+        it "returns 404 for a receipt before submit" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                entryId = entryIdFromTx tx
+                deps =
+                    happyDeps
+                        { mdEntries =
+                            Map.singleton entryId (readyEntry tx)
+                        }
+            response <- waiRequest methodGet (receiptPath entryId) deps mempty
+            simpleStatus response `shouldBe` status404
+
+        it
+            "submits a ready entry, stores a receipt, and marks it submitted"
+            $ do
+                let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                    entry = readyEntry tx
+                    entryId = entryIdFromTx tx
+                    deps =
+                        happyDeps
+                            { mdEntries = Map.singleton entryId entry
+                            , mdNow = receiptTime
+                            }
+                ref <- newIORef deps
+                response <-
+                    waiRequestWithRef methodPost (submitPath entryId) ref mempty
+                simpleStatus response `shouldBe` status200
+                decode (simpleBody response)
+                    `shouldBe` Just (receiptJson (Receipt entryId receiptTime))
+                updated <- readIORef ref
+                mdSubmitted updated `shouldBe` [assembledEntryTx entry]
+                Map.lookup entryId (mdReceipts updated)
+                    `shouldBe` Just (Receipt entryId receiptTime)
+                entryStatus <$> Map.lookup entryId (mdEntries updated)
+                    `shouldBe` Just EntrySubmitted
+
+                body <- getJsonWithRef (entryPath entryId) ref
+                body
+                    `shouldBe` object
+                        [ "entry_id" .= renderEntryId entryId
+                        , "transaction" .= txHexText tx
+                        , "required_signers" .= renderKeyHashes requiredSigners
+                        , "witnesses" .= renderKeyHashes requiredSigners
+                        , "missing" .= ([] :: [Text])
+                        , "invalid_hereafter" .= (125 :: Word64)
+                        , "status" .= ("submitted" :: Text)
+                        ]
+
+        it "returns a persisted receipt after submit" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                entryId = entryIdFromTx tx
+                receipt = Receipt entryId receiptTime
+                deps =
+                    happyDeps
+                        { mdReceipts = Map.singleton entryId receipt
+                        }
+            body <- getJson (receiptPath entryId) deps
+            body `shouldBe` receiptJson receipt
+
+        it "returns 422 when the submitter rejects the assembled transaction"
+            $ do
+                let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                    entryId = entryIdFromTx tx
+                    deps =
+                        happyDeps
+                            { mdEntries = Map.singleton entryId (readyEntry tx)
+                            , mdSubmitResult = Left "mempool rejected"
+                            }
+                response <- postJson (submitPath entryId) deps (object [])
+                simpleStatus response `shouldBe` status422
+
 data MockDeps = MockDeps
     { mdTip :: SlotNo
     , mdPayment :: PaymentConfirmation
     , mdPreflight :: PreflightResult
     , mdEntries :: Map EntryId Entry
+    , mdReceipts :: Map EntryId Receipt
+    , mdSubmitResult :: Either Text ()
+    , mdSubmitted :: [ConwayTx]
+    , mdNow :: UTCTime
     }
 
 happyDeps :: MockDeps
@@ -447,11 +540,25 @@ happyDeps =
                 payment tx 1_250 (bodyHashTagDatum (entryIdFromTx tx))
             , mdPreflight = PreflightAccepted
             , mdEntries = mempty
+            , mdReceipts = mempty
+            , mdSubmitResult = Right ()
+            , mdSubmitted = mempty
+            , mdNow = receiptTime
             }
 
 getJson :: ByteString -> MockDeps -> IO Value
 getJson path deps = do
     response <- waiRequest methodGet path deps mempty
+    simpleStatus response `shouldBe` status200
+    case decode (simpleBody response) of
+        Just value -> pure value
+        Nothing -> do
+            expectationFailure "expected valid JSON response"
+            pure (object [])
+
+getJsonWithRef :: ByteString -> IORef MockDeps -> IO Value
+getJsonWithRef path ref = do
+    response <- waiRequestWithRef methodGet path ref mempty
     simpleStatus response `shouldBe` status200
     case decode (simpleBody response) of
         Just value -> pure value
@@ -494,7 +601,22 @@ waiRequestWithRef method path ref body =
                 , simpleRequestBody = body
                 }
         )
-        (applicationWith "preprod" schedule (mockPublishDeps ref))
+        (applicationWith "preprod" schedule (mockServerDeps ref))
+
+mockServerDeps :: IORef MockDeps -> ServerDeps IO
+mockServerDeps ref =
+    ServerDeps
+        { sdPublish = mockPublishDeps ref
+        , sdSubmitTx = \tx ->
+            atomicModifyIORef'
+                ref
+                ( \s ->
+                    ( s{mdSubmitted = mdSubmitted s <> [tx]}
+                    , mdSubmitResult s
+                    )
+                )
+        , sdNow = mdNow <$> readIORef ref
+        }
 
 mockPublishDeps :: IORef MockDeps -> PublishDeps IO
 mockPublishDeps ref =
@@ -536,8 +658,19 @@ mockPublishDeps ref =
                                         (mdEntries s)
                             in  (s{mdEntries = entries}, ())
                         )
-                , storePutReceipt = \_ _ -> pure ()
-                , storeLookupReceipt = \_ -> pure Nothing
+                , storePutReceipt = \entryId receipt ->
+                    atomicModifyIORef'
+                        ref
+                        ( \s ->
+                            ( s
+                                { mdReceipts =
+                                    Map.insert entryId receipt (mdReceipts s)
+                                }
+                            , ()
+                            )
+                        )
+                , storeLookupReceipt = \entryId ->
+                    Map.lookup entryId . mdReceipts <$> readIORef ref
                 }
         }
 
@@ -569,6 +702,25 @@ storedEntryWithCollected tx witnesses =
         { entryCollectedWitnesses =
             mempty & addrTxWitsL .~ Set.fromList witnesses
         }
+
+readyEntry :: ConwayTx -> Entry
+readyEntry tx =
+    storedEntryWithCollected tx [testWitness 1 tx, testWitness 2 tx]
+
+assembledEntryTx :: Entry -> ConwayTx
+assembledEntryTx =
+    assembleEntryTx
+
+receiptTime :: UTCTime
+receiptTime =
+    addUTCTime 123 (posixSecondsToUTCTime 1_893_456_000)
+
+receiptJson :: Receipt -> Value
+receiptJson Receipt{..} =
+    object
+        [ "tx_id" .= renderEntryId receiptTxId
+        , "submitted_at" .= receiptSubmittedAt
+        ]
 
 payment
     :: ConwayTx -> Integer -> Datum ConwayEra -> PaymentConfirmation
@@ -610,6 +762,14 @@ entryPath entryId =
 witnessPath :: EntryId -> ByteString
 witnessPath entryId =
     entryPath entryId <> "/witnesses"
+
+submitPath :: EntryId -> ByteString
+submitPath entryId =
+    entryPath entryId <> "/submit"
+
+receiptPath :: EntryId -> ByteString
+receiptPath entryId =
+    entryPath entryId <> "/receipt"
 
 witnessBody :: WitVKey Witness -> Value
 witnessBody witness =
