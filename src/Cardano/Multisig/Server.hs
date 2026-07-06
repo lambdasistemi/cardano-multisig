@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Cardano.Multisig.Server
     ( application
@@ -20,10 +21,13 @@ import Cardano.Ledger.Address
     ( Addr
     , serialiseAddr
     )
+import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.BaseTypes
     ( Network (..)
     , TxIx (..)
     )
+import Cardano.Ledger.Binary (serialize')
+import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Hashes (extractHash, unsafeMakeSafeHash)
 import Cardano.Ledger.Keys
     ( KeyHash (..)
@@ -52,8 +56,17 @@ import Cardano.Multisig.Store
     ( Entry (..)
     , EntryId (..)
     , EntryStatus (..)
+    , Store (..)
     )
 import Cardano.Multisig.Store.RocksDB (withRocksDBStore)
+import Cardano.Multisig.Witness
+    ( WitnessFailure (..)
+    , decodeVKeyWitnessHex
+    , entryMissingSigners
+    , entryWitnessStatus
+    , entryWitnesses
+    , verifyEntryWitness
+    )
 import Cardano.Node.Client.Provider
     ( Provider (..)
     , ledgerTipSlot
@@ -202,6 +215,10 @@ applicationWith network schedule deps request respond =
             quoteHandler schedule deps request respond
         ("POST", ["v1", "entries"]) ->
             entriesHandler schedule deps request respond
+        ("GET", ["v1", "entries", rawEntryId]) ->
+            readEntryHandler deps rawEntryId request respond
+        ("POST", ["v1", "entries", rawEntryId, "witnesses"]) ->
+            witnessHandler deps rawEntryId request respond
         (_, "v1" : _) ->
             respond $ jsonResponse status501 notImplemented
         _ ->
@@ -276,6 +293,15 @@ instance FromJSON PublishBody where
                 <$> obj .: "transaction"
                 <*> obj .: "fee_payment"
 
+newtype WitnessBody = WitnessBody
+    { wbWitness :: Text
+    }
+
+instance FromJSON WitnessBody where
+    parseJSON =
+        withObject "WitnessRequest" $ \obj ->
+            WitnessBody <$> obj .: "witness"
+
 feeQuoteJson :: OperatorSchedule -> FeeQuote -> Value
 feeQuoteJson schedule FeeQuote{..} =
     object
@@ -287,16 +313,116 @@ feeQuoteJson schedule FeeQuote{..} =
         ]
 
 entryJson :: Text -> Entry -> Value
-entryJson txHex Entry{..} =
+entryJson =
+    entryJsonWithTx
+
+entryJsonWithTx :: Text -> Entry -> Value
+entryJsonWithTx txHex entry@Entry{..} =
     object
         [ "entry_id" .= renderEntryId entryId
         , "transaction" .= txHex
         , "required_signers" .= renderKeyHashes entryRequiredSigners
-        , "witnesses" .= ([] :: [Text])
-        , "missing" .= renderKeyHashes entryRequiredSigners
+        , "witnesses" .= renderKeyHashes (entryWitnesses entry)
+        , "missing" .= renderKeyHashes (entryMissingSigners entry)
         , "invalid_hereafter" .= renderSlot entryInvalidHereafter
-        , "status" .= renderEntryStatus entryStatus
+        , "status" .= renderEntryStatus (entryWitnessStatus entry)
         ]
+
+storedEntryJson :: Entry -> Value
+storedEntryJson entry =
+    entryJsonWithTx (txHexText (entryTx entry)) entry
+
+witnessResultJson :: Entry -> Value
+witnessResultJson entry =
+    object
+        [ "witnesses" .= renderKeyHashes (entryWitnesses entry)
+        , "missing" .= renderKeyHashes (entryMissingSigners entry)
+        , "status" .= renderEntryStatus (entryWitnessStatus entry)
+        ]
+
+txHexText :: ConwayTx -> Text
+txHexText =
+    TextEncoding.decodeUtf8
+        . Base16.encode
+        . serialize' (eraProtVerLow @ConwayEra)
+
+readEntryHandler
+    :: PublishDeps IO
+    -> Text
+    -> Application
+readEntryHandler deps rawEntryId _request respond =
+    case parseEntryId rawEntryId of
+        Left _ ->
+            respond entryNotFound
+        Right entryId -> do
+            found <- storeLookupEntry (pdStore deps) entryId
+            respond $ case found of
+                Nothing ->
+                    entryNotFound
+                Just entry ->
+                    jsonResponse status200 (storedEntryJson entry)
+
+witnessHandler
+    :: PublishDeps IO
+    -> Text
+    -> Application
+witnessHandler deps rawEntryId request respond =
+    case parseEntryId rawEntryId of
+        Left _ ->
+            respond entryNotFound
+        Right entryId -> do
+            found <- storeLookupEntry (pdStore deps) entryId
+            case found of
+                Nothing ->
+                    respond entryNotFound
+                Just entry -> do
+                    body <- strictRequestBody request
+                    case eitherDecode body of
+                        Left err ->
+                            respond $ failureResponse status422 "invalid_request" err
+                        Right WitnessBody{..} ->
+                            case decodeVKeyWitnessHex (TextEncoding.encodeUtf8 wbWitness)
+                                >>= verifyEntryWitness entry of
+                                Left failure ->
+                                    respond $ witnessFailureResponse failure
+                                Right updated -> do
+                                    storePutEntry (pdStore deps) updated
+                                    respond
+                                        $ jsonResponse
+                                            status200
+                                            (witnessResultJson updated)
+
+entryNotFound :: Response
+entryNotFound =
+    failureResponse status404 "not_found" "entry not found"
+
+parseEntryId :: Text -> Either String EntryId
+parseEntryId raw = do
+    bytes <-
+        case Base16.decode (TextEncoding.encodeUtf8 raw) of
+            Right value -> Right value
+            Left err -> Left ("invalid entry id base16: " <> err)
+    txHash <-
+        case hashFromBytes bytes of
+            Just h -> Right h
+            Nothing -> Left "entry id must be 32 bytes"
+    pure (EntryId (TxId (unsafeMakeSafeHash txHash)))
+
+witnessFailureResponse :: WitnessFailure -> Response
+witnessFailureResponse = \case
+    WitnessAlreadyCollected{} ->
+        failureResponse status409 "duplicate" "witness already collected"
+    WitnessInvalidHex reason ->
+        failureResponse status422 "invalid_witness" (Text.unpack reason)
+    WitnessDecodeFailed reason ->
+        failureResponse status422 "invalid_witness" (Text.unpack reason)
+    WitnessInvalidSignature ->
+        failureResponse
+            status422
+            "invalid_witness"
+            "invalid witness signature"
+    WitnessSignerNotRequired{} ->
+        failureResponse status422 "invalid_witness" "signer is not required"
 
 publishFailureResponse :: PublishFailure -> Response
 publishFailureResponse failure =

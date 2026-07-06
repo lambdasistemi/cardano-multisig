@@ -27,7 +27,8 @@ import Cardano.Ledger.Allegra.Scripts (ValidityInterval (..))
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Scripts.Data (Datum)
 import Cardano.Ledger.Api.Tx
-    ( bodyTxL
+    ( addrTxWitsL
+    , bodyTxL
     , mkBasicTx
     )
 import Cardano.Ledger.Api.Tx.Body
@@ -47,12 +48,19 @@ import Cardano.Ledger.Credential
     ( Credential (KeyHashObj)
     , StakeReference (StakeRefNull)
     )
-import Cardano.Ledger.Hashes (extractHash, unsafeMakeSafeHash)
+import Cardano.Ledger.Hashes
+    ( extractHash
+    , hashAnnotated
+    , unsafeMakeSafeHash
+    )
 import Cardano.Ledger.Keys
     ( KeyHash (..)
-    , KeyRole (Guard, Payment)
+    , KeyRole (Guard, Payment, Witness)
     , VKey (..)
+    , WitVKey (..)
+    , asWitness
     , hashKey
+    , signedDSIGN
     )
 import Cardano.Ledger.Mary.Value (MaryValue (..), MultiAsset (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
@@ -106,7 +114,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Data.Word (Word64, Word8)
-import Lens.Micro ((&), (.~))
+import Lens.Micro ((&), (.~), (^.))
 import Network.HTTP.Types
     ( hContentType
     , methodGet
@@ -114,6 +122,7 @@ import Network.HTTP.Types
     , status200
     , status201
     , status402
+    , status404
     , status409
     , status422
     )
@@ -282,6 +291,146 @@ spec = do
                         )
                 simpleStatus preflight `shouldBe` status422
 
+    describe "Cardano.Multisig.Server witness HTTP routes" $ do
+        it
+            "returns a stored entry with collected witnesses and missing signers"
+            $ do
+                let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                    witness = testWitness 1 tx
+                    entry = storedEntryWithCollected tx [witness]
+                    deps =
+                        happyDeps
+                            { mdEntries =
+                                Map.singleton (entryIdFromTx tx) entry
+                            }
+                body <-
+                    getJson
+                        (entryPath (entryIdFromTx tx))
+                        deps
+                body
+                    `shouldBe` object
+                        [ "entry_id" .= renderEntryId (entryIdFromTx tx)
+                        , "transaction" .= txHexText tx
+                        , "required_signers" .= renderKeyHashes requiredSigners
+                        , "witnesses" .= renderKeyHashes (Set.singleton (signerHash 1))
+                        , "missing" .= renderKeyHashes (Set.singleton (signerHash 2))
+                        , "invalid_hereafter" .= (125 :: Word64)
+                        , "status" .= ("collecting" :: Text)
+                        ]
+
+        it "returns 404 for an absent entry" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+            response <-
+                waiRequest methodGet (entryPath (entryIdFromTx tx)) happyDeps mempty
+            simpleStatus response `shouldBe` status404
+
+        it "returns 422 for an invalid signature witness" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                otherTx = testTx (SJust (SlotNo 126)) requiredSigners
+                deps =
+                    happyDeps
+                        { mdEntries =
+                            Map.singleton (entryIdFromTx tx) (storedEntry tx)
+                        }
+            response <-
+                postJson
+                    (witnessPath (entryIdFromTx tx))
+                    deps
+                    (witnessBody (testWitness 1 otherTx))
+            simpleStatus response `shouldBe` status422
+
+        it "returns 422 for a non-required signer witness" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                deps =
+                    happyDeps
+                        { mdEntries =
+                            Map.singleton (entryIdFromTx tx) (storedEntry tx)
+                        }
+            response <-
+                postJson
+                    (witnessPath (entryIdFromTx tx))
+                    deps
+                    (witnessBody (testWitness 3 tx))
+            simpleStatus response `shouldBe` status422
+
+        it "returns 409 for a duplicate witness" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                witness = testWitness 1 tx
+                deps =
+                    happyDeps
+                        { mdEntries =
+                            Map.singleton
+                                (entryIdFromTx tx)
+                                (storedEntryWithCollected tx [witness])
+                        }
+            response <-
+                postJson
+                    (witnessPath (entryIdFromTx tx))
+                    deps
+                    (witnessBody witness)
+            simpleStatus response `shouldBe` status409
+
+        it "persists a valid witness and returns updated missing signers" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                witness = testWitness 1 tx
+                entryId = entryIdFromTx tx
+                deps =
+                    happyDeps
+                        { mdEntries = Map.singleton entryId (storedEntry tx)
+                        }
+            ref <- newIORef deps
+            response <-
+                waiRequestWithRef
+                    methodPost
+                    (witnessPath entryId)
+                    ref
+                    (encode (witnessBody witness))
+            simpleStatus response `shouldBe` status200
+            decode (simpleBody response)
+                `shouldBe` Just
+                    ( object
+                        [ "witnesses" .= renderKeyHashes (Set.singleton (signerHash 1))
+                        , "missing" .= renderKeyHashes (Set.singleton (signerHash 2))
+                        , "status" .= ("collecting" :: Text)
+                        ]
+                    )
+            stored <- Map.lookup entryId . mdEntries <$> readIORef ref
+            fmap
+                ( renderKeyHashes
+                    . Set.map witnessSignerHash
+                    . (^. addrTxWitsL)
+                    . entryCollectedWitnesses
+                )
+                stored
+                `shouldBe` Just (renderKeyHashes (Set.singleton (signerHash 1)))
+
+        it "returns ready after collecting the full signer roster" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                firstWitness = testWitness 1 tx
+                secondWitness = testWitness 2 tx
+                entryId = entryIdFromTx tx
+                deps =
+                    happyDeps
+                        { mdEntries =
+                            Map.singleton
+                                entryId
+                                (storedEntryWithCollected tx [firstWitness])
+                        }
+            response <-
+                postJson
+                    (witnessPath entryId)
+                    deps
+                    (witnessBody secondWitness)
+            simpleStatus response `shouldBe` status200
+            decode (simpleBody response)
+                `shouldBe` Just
+                    ( object
+                        [ "witnesses" .= renderKeyHashes requiredSigners
+                        , "missing" .= ([] :: [Text])
+                        , "status" .= ("ready" :: Text)
+                        ]
+                    )
+
 data MockDeps = MockDeps
     { mdTip :: SlotNo
     , mdPayment :: PaymentConfirmation
@@ -322,6 +471,15 @@ waiRequest
     -> IO SResponse
 waiRequest method path deps body = do
     ref <- newIORef deps
+    waiRequestWithRef method path ref body
+
+waiRequestWithRef
+    :: ByteString
+    -> ByteString
+    -> IORef MockDeps
+    -> BL.ByteString
+    -> IO SResponse
+waiRequestWithRef method path ref body =
     runSession
         ( srequest
             SRequest
@@ -362,7 +520,22 @@ mockPublishDeps ref =
                         )
                 , storeLookupEntry = \entryId ->
                     Map.lookup entryId . mdEntries <$> readIORef ref
-                , storeCollectWitnesses = \_ _ -> pure ()
+                , storeCollectWitnesses = \entryId txWits ->
+                    atomicModifyIORef'
+                        ref
+                        ( \s ->
+                            let entries =
+                                    Map.adjust
+                                        ( \entry ->
+                                            entry
+                                                { entryCollectedWitnesses =
+                                                    txWits
+                                                }
+                                        )
+                                        entryId
+                                        (mdEntries s)
+                            in  (s{mdEntries = entries}, ())
+                        )
                 , storePutReceipt = \_ _ -> pure ()
                 , storeLookupReceipt = \_ -> pure Nothing
                 }
@@ -388,6 +561,13 @@ storedEntry tx =
         , entryInvalidHereafter = SlotNo 125
         , entryFeePayment = mkTxIn 9
         , entryStatus = EntryCollecting
+        }
+
+storedEntryWithCollected :: ConwayTx -> [WitVKey Witness] -> Entry
+storedEntryWithCollected tx witnesses =
+    (storedEntry tx)
+        { entryCollectedWitnesses =
+            mempty & addrTxWitsL .~ Set.fromList witnesses
         }
 
 payment
@@ -422,6 +602,37 @@ txHexText =
     TextEncoding.decodeUtf8
         . Base16.encode
         . serialize' (eraProtVerLow @ConwayEra)
+
+entryPath :: EntryId -> ByteString
+entryPath entryId =
+    TextEncoding.encodeUtf8 ("/v1/entries/" <> renderEntryId entryId)
+
+witnessPath :: EntryId -> ByteString
+witnessPath entryId =
+    entryPath entryId <> "/witnesses"
+
+witnessBody :: WitVKey Witness -> Value
+witnessBody witness =
+    object ["witness" .= witnessHexText witness]
+
+witnessHexText :: WitVKey Witness -> Text
+witnessHexText =
+    TextEncoding.decodeUtf8
+        . Base16.encode
+        . serialize' (eraProtVerLow @ConwayEra)
+
+testWitness :: Word -> ConwayTx -> WitVKey Witness
+testWitness n tx =
+    WitVKey (asWitness vk) (signedDSIGN sk bodyHash)
+  where
+    sk = testKey n
+    vk = VKey (deriveVerKeyDSIGN sk)
+    bodyHash = extractHash (hashAnnotated (tx ^. bodyTxL))
+
+witnessSignerHash :: WitVKey Witness -> KeyHash Guard
+witnessSignerHash (WitVKey vkey _) =
+    case hashKey vkey of
+        KeyHash h -> KeyHash h
 
 requiredSigners :: Set (KeyHash Guard)
 requiredSigners =

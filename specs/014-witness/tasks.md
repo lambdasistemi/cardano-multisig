@@ -12,13 +12,13 @@
 
 ## Slice 2 - Read And Collect Routes
 
-- [ ] T014-S2 Wire `GET /v1/entries/{id}` and
+- [X] T014-S2 Wire `GET /v1/entries/{id}` and
   `POST /v1/entries/{id}/witnesses` in `Cardano.Multisig.Server`.
-- [ ] T014-S2 Add HTTP tests for missing entry `404`, invalid/non-required
+- [X] T014-S2 Add HTTP tests for missing entry `404`, invalid/non-required
   witness `422`, duplicate witness `409`, valid witness persistence, and full
   roster status `ready`.
-- [ ] T014-S2 Keep the E4 publish behavior and OpenAPI file unchanged.
-- [ ] T014-S2 Run the focused server tests and `./gate.sh`.
+- [X] T014-S2 Keep the E4 publish behavior and OpenAPI file unchanged.
+- [X] T014-S2 Run the focused server tests and `./gate.sh`.
 
 ## Slice 3 - Submit And Receipt Routes
 
