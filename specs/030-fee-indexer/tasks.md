@@ -42,25 +42,25 @@
 
 ## Slice 2 - Checkpointed N2C Follower
 
-- [ ] T002-S2 Add the production ChainSync runner using `chain-follower` and
+- [X] T002-S2 Add the production ChainSync runner using `chain-follower` and
   `cardano-node-clients`.
-- [ ] T002-S2 Add file-backed checkpoint save/load helpers and warm-resume
+- [X] T002-S2 Add file-backed checkpoint save/load helpers and warm-resume
   start-point selection.
-- [ ] T002-S2 On roll-forward, apply classified attributed payments and
+- [X] T002-S2 On roll-forward, apply classified attributed payments and
   malformed records, persist checkpoint, and update observed tip.
-- [ ] T002-S2 On roll-backward, roll back both attributed payments and
+- [X] T002-S2 On roll-backward, roll back both attributed payments and
   malformed records, persist the rollback point when concrete, and continue.
-- [ ] T002-S2 Add safe reset behavior for warm `intersectNotFound`: roll
+- [X] T002-S2 Add safe reset behavior for warm `intersectNotFound`: roll
   attributed payments and malformed records back from slot 0 before retrying
   from origin.
-- [ ] T002-S2 Add a supervised retry wrapper that retries synchronous
+- [X] T002-S2 Add a supervised retry wrapper that retries synchronous
   transient failures while preserving async cancellation.
-- [ ] T002-S2 Add injected-runner tests for warm resume, rollback, safe reset,
+- [X] T002-S2 Add injected-runner tests for warm resume, rollback, safe reset,
   malformed-row rollback, and one transient retry.
-- [ ] T002-S2 Run
+- [X] T002-S2 Run
   `nix develop --quiet -c just unit "Cardano.Multisig.FeeIndexer"` and
   `./gate.sh`.
-- [ ] T002-S2 Commit as `feat: add checkpointed fee chain follower` with
+- [X] T002-S2 Commit as `feat: add checkpointed fee chain follower` with
   trailer `Tasks: T002`.
 
 ## Slice 3 - Server Startup Wiring

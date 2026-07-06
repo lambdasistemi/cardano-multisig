@@ -75,19 +75,25 @@ library
     , cardano-ledger-allegra
     , cardano-ledger-api
     , cardano-ledger-binary
+    , cardano-ledger-byron
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-ledger-mary
+    , cardano-ledger-read
     , cardano-ledger-shelley
     , cardano-node-clients
     , cardano-slotting
     , cardano-tx-tools
     , cardano-tx-tools:n2c-resolver
     , cborg
+    , chain-follower
     , containers
+    , contra-tracer
+    , directory
     , http-types                               <0.13
     , lens
     , microlens
+    , ouroboros-consensus
     , ouroboros-network:api
     , plutus-ledger-api
     , rocksdb-haskell-jprupp
@@ -143,11 +149,13 @@ test-suite unit-tests
     , cardano-node-clients
     , cardano-slotting
     , cardano-tx-tools:tx-build
+    , chain-follower
     , containers
     , hspec                      <2.12
     , http-types                 <0.13
     , microlens
     , mtl
+    , ouroboros-consensus
     , ouroboros-network:api
     , QuickCheck
     , temporary
