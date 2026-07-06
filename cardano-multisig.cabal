@@ -49,6 +49,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Cardano.Multisig.Chain
+    Cardano.Multisig.Publish
     Cardano.Multisig.Server
     Cardano.Multisig.Store
     Cardano.Multisig.Store.Codecs
@@ -62,11 +63,15 @@ library
     , aeson                                    <2.3
     , async
     , base                                     <5
+    , base16-bytestring
     , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-allegra
     , cardano-ledger-api
     , cardano-ledger-binary
     , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-node-clients
     , cardano-slotting
     , cardano-tx-tools
@@ -77,9 +82,11 @@ library
     , lens
     , microlens
     , ouroboros-network:api
+    , plutus-ledger-api
     , rocksdb-haskell-jprupp
     , rocksdb-kv-transactions
     , rocksdb-kv-transactions:kv-transactions
+    , text
     , time
     , wai                                      <3.3
     , wai-cors                                 <0.3
@@ -101,6 +108,7 @@ test-suite unit-tests
   main-is:        Main.hs
   other-modules:
     Cardano.Multisig.ChainSpec
+    Cardano.Multisig.PublishSpec
     Cardano.Multisig.ServerSpec
     Cardano.Multisig.StoreSpec
 
@@ -108,10 +116,12 @@ test-suite unit-tests
     , aeson                      <2.3
     , async
     , base                       <5
+    , base16-bytestring
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-allegra
     , cardano-ledger-api
+    , cardano-ledger-binary
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-ledger-mary
@@ -122,6 +132,7 @@ test-suite unit-tests
     , containers
     , hspec                      <2.12
     , microlens
+    , mtl
     , ouroboros-network:api
     , temporary
     , text
