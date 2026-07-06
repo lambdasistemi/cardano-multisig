@@ -22,8 +22,8 @@
 
 ## Finalization
 
-- [ ] T31-F1 Verify no forbidden legacy API package string, old datum-tag helper
+- [X] T31-F1 Verify no forbidden legacy API package string, old datum-tag helper
   name, or old tag-mismatch reason string remains in code/tests.
-- [ ] T31-F1 Verify PR body contains `Closes #31`.
-- [ ] T31-F1 Drop `gate.sh`, mark the PR ready for review, and verify all six CI
+- [X] T31-F1 Verify PR body contains `Closes #31`.
+- [X] T31-F1 Drop `gate.sh`, mark the PR ready for review, and verify all six CI
   checks are green.
