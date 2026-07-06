@@ -1,0 +1,982 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://lambdasistemi.github.io/cardano-multisig/api-v1/">
+      
+      
+        <link rel="prev" href="..">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>API (/v1) - cardano-multisig</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cardano-multisig-v1-http-api-design-spec" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="cardano-multisig" class="md-header__button md-logo" aria-label="cardano-multisig" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            cardano-multisig
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API (/v1)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/lambdasistemi/cardano-multisig" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="cardano-multisig" class="md-nav__button md-logo" aria-label="cardano-multisig" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    cardano-multisig
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/lambdasistemi/cardano-multisig" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API (/v1)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API (/v1)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authorization-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authorization model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lifecycle-who-pays-signs-at-each-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle — who pays / signs at each step
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoints
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Endpoints">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-v1operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/operator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1fee-quote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/fee-quote
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1entries-publish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/entries — publish
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1entriesid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/entries/{id}
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1entries-what-must-i-sign" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/entries — "what must I sign?"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1entriesidwitnesses-add-a-witness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/entries/{id}/witnesses — add a witness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1entriesidsubmit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/entries/{id}/submit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1entriesidreceipt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/entries/{id}/receipt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-v1signersvkeyhashfilter-stored-filter-policy-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /v1/signers/{vkeyhash}/filter — stored filter policy (optional)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-api-deliberately-does-not-have" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the API deliberately does NOT have
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes-for-the-openapi-of-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes for the OpenAPI of record
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authorization-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authorization model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lifecycle-who-pays-signs-at-each-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle — who pays / signs at each step
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoints
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Endpoints">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-v1operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/operator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1fee-quote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/fee-quote
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1entries-publish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/entries — publish
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1entriesid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/entries/{id}
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1entries-what-must-i-sign" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/entries — "what must I sign?"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1entriesidwitnesses-add-a-witness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/entries/{id}/witnesses — add a witness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1entriesidsubmit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/entries/{id}/submit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1entriesidreceipt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/entries/{id}/receipt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-v1signersvkeyhashfilter-stored-filter-policy-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /v1/signers/{vkeyhash}/filter — stored filter policy (optional)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-api-deliberately-does-not-have" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the API deliberately does NOT have
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes-for-the-openapi-of-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes for the OpenAPI of record
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="cardano-multisig-v1-http-api-design-spec">cardano-multisig — <code>/v1</code> HTTP API (design spec)</h1>
+<p><strong>Status:</strong> design. The formal OpenAPI 3.1 document — the wire contract of
+record (constitution, <em>Technology &amp; Interface Constraints</em>) — is generated
+from and kept in sync with this design during Milestone 1. This document
+fixes the endpoint surface, the authorization model, and <strong>who pays or signs
+at each step</strong>. Every endpoint cites the constitutional principle it
+enforces.</p>
+<h2 id="roles">Roles</h2>
+<ul>
+<li><strong>Proposer / courier</strong> — publishes an unsigned transaction and pays the
+  fee. Need not be a required-signer (Principle I).</li>
+<li><strong>Signer</strong> — a key in a transaction's <code>required_signers</code>. Adds witnesses;
+  owns their filter policy.</li>
+<li><strong>Reader</strong> — anyone. Reads are open.</li>
+<li><strong>Operator</strong> — runs the service, advertises a fee schedule, holds only a
+  fee-collection address (Principle VIII). Out of band w.r.t. the request
+  path.</li>
+</ul>
+<h2 id="authorization-model">Authorization model</h2>
+<p>No session, cookie, account, or login (Principle I). Every state-changing
+call carries its own proof <strong>in the payload</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Proof carried</th>
+<th>Who</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Publish</td>
+<td><strong>fee</strong> — a confirmed, tagged on-chain payment</td>
+<td>proposer</td>
+</tr>
+<tr>
+<td>Add witness</td>
+<td><strong>the witness itself</strong> — Ed25519 over the body hash, key ∈ roster</td>
+<td>signer</td>
+</tr>
+<tr>
+<td>Set filter policy</td>
+<td><strong>signature</strong> by the signer's key</td>
+<td>signer</td>
+</tr>
+<tr>
+<td>Submit</td>
+<td><strong>none</strong> — a complete tx is broadcastable by anyone (deferred)</td>
+<td>anyone</td>
+</tr>
+<tr>
+<td>All reads</td>
+<td>none</td>
+<td>anyone</td>
+</tr>
+</tbody>
+</table>
+<p>CORS is <strong>credential-free</strong> (Technology constraints): authorization is in the
+body, never in cookies.</p>
+<h2 id="lifecycle-who-pays-signs-at-each-step">Lifecycle — who pays / signs at each step</h2>
+<ol>
+<li><strong>Quote</strong> — <code>POST /v1/fee-quote { transaction }</code> → the exact
+   validity-weighted fee, the fee address, and the required tag (the body
+   hash). <em>No auth.</em></li>
+<li><strong>Pay</strong> <em>(off-chain Cardano payment — not an API call)</em> — the <strong>proposer</strong>
+   sends the quoted lovelace to the fee address, <strong>tagged with the body
+   hash</strong>, and waits for confirmation.</li>
+<li><strong>Publish</strong> — <code>POST /v1/entries { transaction, fee_payment }</code>. The service
+   re-derives the body hash, runs a live phase-1 pre-flight, checks the
+   <code>invalidHereafter</code> is bounded within the horizon, and checks the tagged
+   payment is confirmed and <strong>covers <code>base + rate × (invalidHereafter −
+   tip)</code></strong>. <em>Auth: fee.</em></li>
+<li><strong>Find</strong> — signers call <code>GET /v1/entries?signer=…&amp;predicate=…</code> to surface
+   what they are open to sign (default-deny filter, Principle III). <em>Read.</em></li>
+<li><strong>Witness</strong> — each signer <code>POST /v1/entries/{id}/witnesses { witness }</code>.
+   Verified against the body hash and the roster. <em>Auth: the witness.</em></li>
+<li><strong>Watch</strong> — anyone <code>GET /v1/entries/{id}</code> for progress, liveness, expiry.</li>
+<li><strong>Submit</strong> — <code>POST /v1/entries/{id}/submit</code> once fully witnessed: assemble,
+   broadcast, persist a receipt. <em>No auth.</em></li>
+<li><strong>Receipt</strong> — <code>GET /v1/entries/{id}/receipt</code>.</li>
+</ol>
+<p><strong>Multi-homing</strong> (Operator market &amp; federation): a client MAY run steps 1–3
+against several operators in parallel; each charges its own fee. Witnesses in
+step 5 re-post to each. This is how a client survives a single operator
+disappearing (Principle VII).</p>
+<h2 id="endpoints">Endpoints</h2>
+<h3 id="get-v1operator"><code>GET /v1/operator</code></h3>
+<p>Operator discovery + fee schedule (federation; Economic model).
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;network&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mainnet&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;fee&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;base_lovelace&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1000000</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;rate_lovelace_per_slot&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;address&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;addr1...&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;tag_field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;body_hash_blake2b_256&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;ttl_horizon_slots&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">864000</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;roster_types&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;required_signers&quot;</span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<h3 id="post-v1fee-quote"><code>POST /v1/fee-quote</code></h3>
+<p>Body: <code>{ "transaction": "&lt;unsigned tx CBOR hex&gt;" }</code>
+→ <code>200</code>:
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;body_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;required_fee_lovelace&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1600000</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;fee_address&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;addr1...&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;tag&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;body_hash&gt;&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;invalid_hereafter&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1234567</span>
+<span class="p">}</span>
+</code></pre></div>
+→ <code>422</code> — undecodable tx, or <code>invalidHereafter</code> absent / unbounded / beyond
+the horizon.
+Convenience so the proposer pays the exact validity-weighted amount. <em>No
+auth.</em> Enforces: Economic model (validity-weighted fee).</p>
+<h3 id="post-v1entries-publish"><code>POST /v1/entries</code> — publish</h3>
+<p>Body: <code>{ "transaction": "&lt;unsigned tx CBOR hex&gt;", "fee_payment": "&lt;txid#ix&gt;" }</code>
+Auth: <strong>fee</strong>. The service:
+1. decodes the tx and derives <code>body_hash</code>;
+2. runs a live phase-1 pre-flight — inputs resolve, validity interval
+   contains the tip, value conserved (Principle V);
+3. requires a bounded <code>invalidHereafter</code> within the horizon (Principle V);
+4. verifies <code>fee_payment</code> is on-chain, pays the fee address, is tagged with
+   <code>body_hash</code>, is confirmed, and <strong>covers <code>base + rate × (invalid_hereafter
+   − tip)</code></strong> (Economic model).</p>
+<p>→ <code>201</code>:
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;entry_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;body_hash&gt;&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;required_signers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;…&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;witnesses&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">&quot;invalid_hereafter&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1234567</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;collecting&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+→ <code>402</code> fee missing / unconfirmed / insufficient · <code>422</code> phase-1 fail or TTL
+unbounded / over-horizon · <code>409</code> duplicate <code>entry_id</code>.
+Enforces: Principles I (fee-gated, proposer-open), V, VI, Economic model.</p>
+<h3 id="get-v1entriesid"><code>GET /v1/entries/{id}</code></h3>
+<p>→ <code>200</code>:
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;entry_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;transaction&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;unsigned tx CBOR hex&gt;&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;required_signers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;…&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;witnesses&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;&lt;vkeyhash&gt;&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;missing&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;&lt;vkeyhash&gt;&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;liveness&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;inputs_unspent&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;phase1_ok&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;invalid_hereafter&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1234567</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;collecting&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+<code>status ∈ collecting | ready | submitted | expired</code>. Public read.</p>
+<h3 id="get-v1entries-what-must-i-sign"><code>GET /v1/entries</code> — "what must I sign?"</h3>
+<p>Query: <code>signer=&lt;vkeyhash&gt;</code> (entries whose roster includes this key) plus a
+<strong>filter predicate</strong>:
+- <code>predicate=trust-ordered&amp;allowlist=&lt;vkeyhash,…&gt;</code> — surface only entries
+  <strong>already witnessed by a listed co-signer</strong> (default-deny; the canonical
+  predicate, Principle III);
+- <code>predicate=roster-open</code> — the <strong>bootstrap predicate</strong>: surface entries
+  where <code>signer</code> is on the roster <strong>regardless of existing witnesses</strong> (for
+  first-movers, Principle III).</p>
+<p>→ <code>200 { "entries": [ …summaries… ] }</code>. Public read; the filter is the
+signer's own choice. Enforces: Principle III (filter is the sole inbox
+defence; bootstrap for zero-witness entries).</p>
+<h3 id="post-v1entriesidwitnesses-add-a-witness"><code>POST /v1/entries/{id}/witnesses</code> — add a witness</h3>
+<p>Body: <code>{ "witness": "&lt;vkey_witness CBOR hex&gt;" }</code>. Auth: <strong>self-securing</strong> —
+the witness. Verified: signature valid over <code>body_hash</code>; key ∈
+<code>required_signers</code>; not already present.
+→ <code>200 { "witnesses": […], "missing": […], "status": "collecting|ready" }</code>
+→ <code>422</code> invalid signature or non-required key · <code>404</code> entry expired / absent
+· <code>409</code> duplicate witness.
+Enforces: Principle I (a valid witness needs no other credential).</p>
+<h3 id="post-v1entriesidsubmit"><code>POST /v1/entries/{id}/submit</code></h3>
+<p>Auth: <strong>none</strong> (deferred; Milestones). If <code>status = ready</code>, assemble and
+broadcast; persist a receipt.
+→ <code>200 { "tx_id": "…", "submitted_at": "…" }</code>
+→ <code>409</code> not fully witnessed · <code>422</code> phase-1 now fails or entry expired.</p>
+<h3 id="get-v1entriesidreceipt"><code>GET /v1/entries/{id}/receipt</code></h3>
+<p>→ <code>200 { "tx_id": "…", "submitted_at": "…" }</code> · <code>404</code> if not submitted.</p>
+<h3 id="put-v1signersvkeyhashfilter-stored-filter-policy-optional"><code>PUT /v1/signers/{vkeyhash}/filter</code> — stored filter policy (optional)</h3>
+<p>Body: <code>{ "predicate": { … }, "signature": "&lt;Ed25519 over the canonical policy bytes&gt;" }</code>
+Auth: <strong>signature</strong> by <code>{vkeyhash}</code>. Stores the signer's default
+open-to-sign predicate so <code>GET /v1/entries?signer=…</code> applies it without
+re-specifying. Nobody can set another key's policy.
+Enforces: Principle III (filter policy scoped to a key, signed).</p>
+<h2 id="what-the-api-deliberately-does-not-have">What the API deliberately does NOT have</h2>
+<ul>
+<li><strong>No delete</strong> — entries expire automatically (Principle V).</li>
+<li><strong>No refund</strong> — the fee is non-refundable (Economic model); its absence is
+  what keeps the design validator-free (Principle VI).</li>
+<li><strong>No account / registration / login</strong> (Principle I).</li>
+<li><strong>No key-custody or signing endpoint</strong> — the service never signs
+  (Principle VIII).</li>
+</ul>
+<h2 id="notes-for-the-openapi-of-record">Notes for the OpenAPI of record</h2>
+<ul>
+<li>Media type <code>application/json</code>; transactions and witnesses as CBOR hex
+  strings.</li>
+<li>All errors share <code>{ "error": { "code": "…", "message": "…", "detail"?: … } }</code>.</li>
+<li><code>entry_id</code> is the transaction <strong>body hash</strong> (blake2b-256) throughout — the
+  single identifier tying quote → payment tag → entry → witnesses →
+  submitted <code>tx_id</code>.</li>
+<li>The service exposes <strong>zero on-chain interfaces</strong>: the fee is an ordinary
+  tagged payment the service <em>reads</em>, never a contract it calls (Principle
+  VI).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "content.code.copy", "navigation.path"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+    
+  </body>
+</html>
