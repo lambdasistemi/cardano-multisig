@@ -382,6 +382,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#get-v1fee-statusid-fee-readiness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/fee-status/{id} — fee readiness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#post-v1entries-publish" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -587,6 +598,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#get-v1fee-statusid-fee-readiness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/fee-status/{id} — fee readiness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#post-v1entries-publish" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -719,12 +741,11 @@
 
 
 <h1 id="cardano-multisig-v1-http-api-design-spec">cardano-multisig — <code>/v1</code> HTTP API (design spec)</h1>
-<p><strong>Status:</strong> design. The formal OpenAPI 3.1 document — the wire contract of
-record (constitution, <em>Technology &amp; Interface Constraints</em>) — is generated
-from and kept in sync with this design during Milestone 1. This document
-fixes the endpoint surface, the authorization model, and <strong>who pays or signs
-at each step</strong>. Every endpoint cites the constitutional principle it
-enforces.</p>
+<p><strong>Status:</strong> design. The hand-authored OpenAPI 3.1 document — the wire
+contract of record (constitution, <em>Technology &amp; Interface Constraints</em>) — is
+kept in sync with this design during Milestone 1. This document fixes the
+endpoint surface, the authorization model, and <strong>who pays or signs at each
+step</strong>. Every endpoint cites the constitutional principle it enforces.</p>
 <h2 id="roles">Roles</h2>
 <ul>
 <li><strong>Proposer / courier</strong> — publishes an unsigned transaction and pays the
@@ -785,7 +806,12 @@ body, never in cookies.</p>
 <li><strong>Pay</strong> <em>(off-chain Cardano payment — not an API call)</em> — the <strong>proposer</strong>
    sends the quoted lovelace to the fee address, <strong>tagged with the body
    hash</strong>, and waits for confirmation.</li>
-<li><strong>Publish</strong> — <code>POST /v1/entries { transaction, fee_payment }</code>. The service
+<li><strong>Poll fee status</strong> — <code>GET /v1/fee-status/{id}</code> where <code>id</code> is the body
+   hash. The client waits until the operator reports the fee payment as
+   confirmed and sufficient.</li>
+<li><strong>Publish</strong> — <code>POST /v1/entries { transaction }</code>. The client MAY also send
+   <code>fee_payment</code> as an explicit tx-in hint if it already knows the fee output.
+   The service
    re-derives the body hash, runs a live phase-1 pre-flight, checks the
    <code>invalidHereafter</code> is bounded within the horizon, and checks the tagged
    payment is confirmed and <strong>covers <code>base + rate × (invalidHereafter −
@@ -799,9 +825,9 @@ body, never in cookies.</p>
    broadcast, persist a receipt. <em>No auth.</em></li>
 <li><strong>Receipt</strong> — <code>GET /v1/entries/{id}/receipt</code>.</li>
 </ol>
-<p><strong>Multi-homing</strong> (Operator market &amp; federation): a client MAY run steps 1–3
+<p><strong>Multi-homing</strong> (Operator market &amp; federation): a client MAY run steps 1–4
 against several operators in parallel; each charges its own fee. Witnesses in
-step 5 re-post to each. This is how a client survives a single operator
+step 6 re-post to each. This is how a client survives a single operator
 disappearing (Principle VII).</p>
 <h2 id="endpoints">Endpoints</h2>
 <h3 id="get-v1operator"><code>GET /v1/operator</code></h3>
@@ -812,7 +838,7 @@ disappearing (Principle VII).</p>
 <span class="w">    </span><span class="nt">&quot;base_lovelace&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1000000</span><span class="p">,</span>
 <span class="w">    </span><span class="nt">&quot;rate_lovelace_per_slot&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
 <span class="w">    </span><span class="nt">&quot;address&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;addr1...&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;tag_field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;body_hash_blake2b_256&quot;</span>
+<span class="w">    </span><span class="nt">&quot;tag_field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;metadata[9721].body_hash&quot;</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="nt">&quot;ttl_horizon_slots&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">864000</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;roster_types&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;required_signers&quot;</span><span class="p">]</span>
@@ -833,16 +859,51 @@ disappearing (Principle VII).</p>
 the horizon.
 Convenience so the proposer pays the exact validity-weighted amount. <em>No
 auth.</em> Enforces: Economic model (validity-weighted fee).</p>
+<p>Fee payments carry the body hash in transaction metadata using no-schema JSON:
+label <code>9721</code>, a one-key map, key <code>body_hash</code>, and a value equal to the
+transaction body hash as 64 lowercase hex characters.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="w"> </span><span class="nt">&quot;9721&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;body_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;64 lowercase hex body hash&gt;&quot;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<p>Current <code>cardano-cli</code> no-schema metadata flags:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">BODY_HASH</span><span class="o">=</span>0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+cat<span class="w"> </span>&gt;<span class="w"> </span>fee-metadata.json<span class="w"> </span><span class="s">&lt;&lt;JSON</span>
+<span class="s">{ &quot;9721&quot;: { &quot;body_hash&quot;: &quot;${BODY_HASH}&quot; } }</span>
+<span class="s">JSON</span>
+
+cardano-cli<span class="w"> </span>transaction<span class="w"> </span>build<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tx-out<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">FEE_ADDRESS</span><span class="si">}</span><span class="s2">+</span><span class="si">${</span><span class="nv">REQUIRED_FEE_LOVELACE</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--change-address<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">CHANGE_ADDRESS</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--json-metadata-no-schema<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--metadata-json-file<span class="w"> </span>fee-metadata.json<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--out-file<span class="w"> </span>fee-payment.body
+</code></pre></div>
+<h3 id="get-v1fee-statusid-fee-readiness"><code>GET /v1/fee-status/{id}</code> — fee readiness</h3>
+<p><code>id</code> is the transaction body hash. The operator reads the chain for a payment
+to its fee address carrying <code>metadata[9721].body_hash = id</code>, then reports
+whether the payment is confirmed and sufficient.</p>
+<p>→ <code>200</code>:
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;body_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;body_hash&gt;&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;paid&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fee_unconfirmed&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;fee_payment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;txid#ix&gt;&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+<code>reason ∈ fee_not_seen | fee_unconfirmed | fee_insufficient |
+fee_metadata_malformed</code>. Malformed label <code>9721</code> metadata is a fee-status
+payment failure, not a phase-1 transaction failure.</p>
 <h3 id="post-v1entries-publish"><code>POST /v1/entries</code> — publish</h3>
-<p>Body: <code>{ "transaction": "&lt;unsigned tx CBOR hex&gt;", "fee_payment": "&lt;txid#ix&gt;" }</code>
+<p>Body: <code>{ "transaction": "&lt;unsigned tx CBOR hex&gt;" }</code>; optionally
+<code>{ "fee_payment": "&lt;txid#ix&gt;" }</code> when the client already has the exact fee
+payment output.
 Auth: <strong>fee</strong>. The service:
 1. decodes the tx and derives <code>body_hash</code>;
 2. runs a live phase-1 pre-flight — inputs resolve, validity interval
    contains the tip, value conserved (Principle V);
 3. requires a bounded <code>invalidHereafter</code> within the horizon (Principle V);
-4. verifies <code>fee_payment</code> is on-chain, pays the fee address, is tagged with
-   <code>body_hash</code>, is confirmed, and <strong>covers <code>base + rate × (invalid_hereafter
-   − tip)</code></strong> (Economic model).</p>
+4. verifies a matching fee payment is on-chain, pays the fee address, carries
+   <code>metadata[9721].body_hash</code>, is confirmed, and <strong>covers <code>base + rate ×
+   (invalid_hereafter − tip)</code></strong> (Economic model).</p>
 <p>→ <code>201</code>:
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;entry_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;body_hash&gt;&quot;</span><span class="p">,</span>
@@ -852,8 +913,8 @@ Auth: <strong>fee</strong>. The service:
 <span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;collecting&quot;</span>
 <span class="p">}</span>
 </code></pre></div>
-→ <code>402</code> fee missing / unconfirmed / insufficient · <code>422</code> phase-1 fail or TTL
-unbounded / over-horizon · <code>409</code> duplicate <code>entry_id</code>.
+→ <code>402</code> fee missing / unconfirmed / insufficient / malformed metadata · <code>422</code>
+phase-1 fail or TTL unbounded / over-horizon · <code>409</code> duplicate <code>entry_id</code>.
 Enforces: Principles I (fee-gated, proposer-open), V, VI, Economic model.</p>
 <h3 id="get-v1entriesid"><code>GET /v1/entries/{id}</code></h3>
 <p>→ <code>200</code>:
