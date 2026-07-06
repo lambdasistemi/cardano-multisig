@@ -13,12 +13,12 @@
 
 ## Slice B - Fee-Status Handler
 
-- [ ] T31-S2 Add `GET /v1/fee-status/{id}` with optional `payment` query parsing.
-- [ ] T31-S2 Return `observed`, `confirmed`, `sufficient`, `ready_to_publish`,
+- [X] T31-S2 Add `GET /v1/fee-status/{id}` with optional `payment` query parsing.
+- [X] T31-S2 Return `observed`, `confirmed`, `sufficient`, `ready_to_publish`,
   `paid_lovelace`, `required_lovelace`, `confirmations`, and `reason`.
-- [ ] T31-S2 Cover ready, not-seen, unconfirmed, insufficient, and malformed
+- [X] T31-S2 Cover ready, not-seen, unconfirmed, insufficient, and malformed
   fee-status cases in tests.
-- [ ] T31-S2 Pass focused fee-status tests and `./gate.sh`.
+- [X] T31-S2 Pass focused fee-status tests and `./gate.sh`.
 
 ## Finalization
 
