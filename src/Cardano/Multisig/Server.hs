@@ -43,6 +43,7 @@ import Cardano.Multisig.Chain
     , readPaymentConfirmation
     , withNodeProviderAndSubmitter
     )
+import Cardano.Multisig.Filter qualified as Filter
 import Cardano.Multisig.Publish
     ( FeeQuote (..)
     , OperatorSchedule (..)
@@ -92,8 +93,10 @@ import Data.Aeson
     , object
     , withObject
     , (.:)
+    , (.:?)
     , (.=)
     )
+import Data.ByteString (ByteString)
 import Data.ByteString.Base16 qualified as Base16
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -111,6 +114,8 @@ import Network.HTTP.Types
     , hContentType
     , status200
     , status201
+    , status204
+    , status401
     , status402
     , status404
     , status409
@@ -121,6 +126,7 @@ import Network.Wai
     ( Application
     , Response
     , pathInfo
+    , queryString
     , requestMethod
     , responseLBS
     , strictRequestBody
@@ -230,8 +236,12 @@ applicationWith network schedule deps request respond =
             quoteHandler schedule (sdPublish deps) request respond
         ("POST", ["v1", "entries"]) ->
             entriesHandler schedule (sdPublish deps) request respond
+        ("GET", ["v1", "entries"]) ->
+            listEntriesHandler (sdPublish deps) request respond
         ("GET", ["v1", "entries", rawEntryId]) ->
             readEntryHandler (sdPublish deps) rawEntryId request respond
+        ("PUT", ["v1", "signers", rawSigner, "filter"]) ->
+            signerFilterHandler (sdPublish deps) rawSigner request respond
         ("POST", ["v1", "entries", rawEntryId, "witnesses"]) ->
             witnessHandler (sdPublish deps) rawEntryId request respond
         ("POST", ["v1", "entries", rawEntryId, "submit"]) ->
@@ -321,6 +331,30 @@ instance FromJSON WitnessBody where
         withObject "WitnessRequest" $ \obj ->
             WitnessBody <$> obj .: "witness"
 
+data FilterPredicateBody = FilterPredicateBody
+    { fpbName :: Text
+    , fpbAllowlist :: Maybe [Text]
+    }
+
+instance FromJSON FilterPredicateBody where
+    parseJSON =
+        withObject "FilterPredicate" $ \obj ->
+            FilterPredicateBody
+                <$> obj .: "name"
+                <*> obj .:? "allowlist"
+
+data FilterPolicyBody = FilterPolicyBody
+    { fpbPredicate :: FilterPredicateBody
+    , fpbSignature :: Text
+    }
+
+instance FromJSON FilterPolicyBody where
+    parseJSON =
+        withObject "FilterPolicyRequest" $ \obj ->
+            FilterPolicyBody
+                <$> obj .: "predicate"
+                <*> obj .: "signature"
+
 feeQuoteJson :: OperatorSchedule -> FeeQuote -> Value
 feeQuoteJson schedule FeeQuote{..} =
     object
@@ -350,6 +384,17 @@ entryJsonWithTx txHex entry@Entry{..} =
 storedEntryJson :: Entry -> Value
 storedEntryJson entry =
     entryJsonWithTx (txHexText (entryTx entry)) entry
+
+entrySummaryJson :: Entry -> Value
+entrySummaryJson entry@Entry{..} =
+    object
+        [ "entry_id" .= renderEntryId entryId
+        , "required_signers" .= renderKeyHashes entryRequiredSigners
+        , "witnesses" .= renderKeyHashes (entryWitnesses entry)
+        , "missing" .= renderKeyHashes (entryMissingSigners entry)
+        , "invalid_hereafter" .= renderSlot entryInvalidHereafter
+        , "status" .= renderEntryStatus (entryWitnessStatus entry)
+        ]
 
 witnessResultJson :: Entry -> Value
 witnessResultJson entry =
@@ -387,6 +432,79 @@ readEntryHandler deps rawEntryId _request respond =
                     entryNotFound
                 Just entry ->
                     jsonResponse status200 (storedEntryJson entry)
+
+listEntriesHandler
+    :: PublishDeps IO
+    -> Application
+listEntriesHandler deps request respond =
+    case parseListFilterQuery (queryString request) of
+        Left err ->
+            respond $ failureResponse status422 "invalid_filter" (Text.unpack err)
+        Right (signer, Nothing) -> do
+            stored <- storeLookupSignerFilter store signer
+            case stored
+                >>= either (const Nothing) Just . Filter.decodeFilterPolicyBytes of
+                Nothing ->
+                    respond
+                        $ failureResponse
+                            status422
+                            "invalid_filter"
+                            "missing signer default filter policy"
+                Just policy ->
+                    respondEntries signer policy
+        Right (signer, Just policy) ->
+            respondEntries signer policy
+  where
+    store = pdStore deps
+    respondEntries signer policy = do
+        entries <- storeListEntries store
+        respond
+            $ jsonResponse status200
+            $ object
+                [ "entries"
+                    .= fmap
+                        entrySummaryJson
+                        (Filter.filterEntries policy signer entries)
+                ]
+
+signerFilterHandler
+    :: PublishDeps IO
+    -> Text
+    -> Application
+signerFilterHandler deps rawSigner request respond =
+    case Filter.parseKeyHash rawSigner of
+        Left err ->
+            respond $ failureResponse status422 "invalid_signer" (Text.unpack err)
+        Right signer -> do
+            body <- strictRequestBody request
+            case eitherDecode body of
+                Left err ->
+                    respond $ failureResponse status422 "invalid_request" err
+                Right FilterPolicyBody{..} ->
+                    case filterPredicateFromBody fpbPredicate of
+                        Left err ->
+                            respond
+                                $ failureResponse
+                                    status422
+                                    "invalid_filter"
+                                    (Text.unpack err)
+                        Right policy ->
+                            case decodeVKeyWitnessHex
+                                (TextEncoding.encodeUtf8 fpbSignature) of
+                                Left{} ->
+                                    respond unauthorizedFilter
+                                Right witness
+                                    | Filter.verifyFilterPolicyWitness
+                                        signer
+                                        policy
+                                        witness -> do
+                                        storePutSignerFilter
+                                            (pdStore deps)
+                                            signer
+                                            (Filter.encodeFilterPolicyBytes policy)
+                                        respond noContentResponse
+                                    | otherwise ->
+                                        respond unauthorizedFilter
 
 witnessHandler
     :: PublishDeps IO
@@ -478,6 +596,62 @@ receiptHandler deps rawEntryId _request respond =
                     entryNotFound
                 Just receipt ->
                     jsonResponse status200 (receiptJson receipt)
+
+filterPredicateFromBody
+    :: FilterPredicateBody
+    -> Either Text Filter.FilterPolicy
+filterPredicateFromBody FilterPredicateBody{..} =
+    Filter.parseFilterPolicy fpbName fpbAllowlist
+
+parseListFilterQuery
+    :: [(ByteString, Maybe ByteString)]
+    -> Either Text (KeyHash Guard, Maybe Filter.FilterPolicy)
+parseListFilterQuery query = do
+    signerText <- requireQueryParam "signer" query
+    signer <- Filter.parseKeyHash signerText
+    let policyName = optionalQueryParam "predicate" query
+    policy <- case policyName of
+        Nothing -> Right Nothing
+        Just name -> do
+            let allowlist =
+                    filter (not . Text.null) . Text.splitOn ","
+                        <$> optionalQueryParam "allowlist" query
+            Just <$> Filter.parseFilterPolicy name allowlist
+    Right (signer, policy)
+
+requireQueryParam
+    :: ByteString
+    -> [(ByteString, Maybe ByteString)]
+    -> Either Text Text
+requireQueryParam name query =
+    case optionalQueryParam name query of
+        Just value
+            | not (Text.null value) -> Right value
+        _ -> Left ("missing query parameter: " <> decodeParamName name)
+
+optionalQueryParam
+    :: ByteString
+    -> [(ByteString, Maybe ByteString)]
+    -> Maybe Text
+optionalQueryParam name query =
+    case [value | (key, Just value) <- query, key == name] of
+        [value] -> Just (TextEncoding.decodeUtf8 value)
+        _ -> Nothing
+
+decodeParamName :: ByteString -> Text
+decodeParamName =
+    TextEncoding.decodeUtf8
+
+unauthorizedFilter :: Response
+unauthorizedFilter =
+    failureResponse
+        status401
+        "unauthorized"
+        "filter policy signature is not authorized"
+
+noContentResponse :: Response
+noContentResponse =
+    responseLBS status204 [] mempty
 
 entryNotFound :: Response
 entryNotFound =

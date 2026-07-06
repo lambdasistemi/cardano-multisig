@@ -61,7 +61,7 @@ import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Word (Word8)
 import Lens.Micro ((%~), (&), (.~))
 import System.IO.Temp (withSystemTempDirectory)
-import Test.Hspec (Spec, describe, it, shouldBe)
+import Test.Hspec (Spec, describe, it, shouldBe, shouldReturn)
 
 spec :: Spec
 spec =
@@ -88,6 +88,18 @@ spec =
                 withRocksDBStore dir $ \store ->
                     storeLookupEntry store (entryId entry)
                         `shouldReturnEntry` Just entry
+
+        it "persists signer filter policies across close and reopen"
+            $ withSystemTempDirectory "cardano-multisig-store"
+            $ \dir -> do
+                let signer = signerHash 1
+                    policyBytes =
+                        "cardano-multisig-filter-v1\npredicate=roster-open\n"
+                withRocksDBStore dir $ \store ->
+                    storePutSignerFilter store signer policyBytes
+                withRocksDBStore dir $ \store ->
+                    storeLookupSignerFilter store signer
+                        `shouldReturn` Just policyBytes
 
         it
             "serializes concurrent witness writes and preserves distinct witnesses"

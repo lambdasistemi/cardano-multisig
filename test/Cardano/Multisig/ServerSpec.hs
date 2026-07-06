@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Cardano.Multisig.ServerSpec
     ( spec
@@ -18,6 +19,7 @@ import Cardano.Crypto.DSIGN
     )
 import Cardano.Crypto.Hash (hashFromBytes)
 import Cardano.Crypto.Hash.Class (Hash, HashAlgorithm, hashToBytes)
+import Cardano.Crypto.Hash.Class qualified as Hash
 import Cardano.Crypto.Seed (mkSeedFromBytes)
 import Cardano.Ledger.Address
     ( Addr (..)
@@ -49,7 +51,9 @@ import Cardano.Ledger.Credential
     , StakeReference (StakeRefNull)
     )
 import Cardano.Ledger.Hashes
-    ( extractHash
+    ( EraIndependentTxBody
+    , HASH
+    , extractHash
     , hashAnnotated
     , unsafeMakeSafeHash
     )
@@ -68,6 +72,10 @@ import Cardano.Multisig.Chain
     ( PaymentConfirmation (..)
     , PaymentConfirmationEvidence (..)
     , PaymentReadResult (..)
+    )
+import Cardano.Multisig.Filter
+    ( FilterPolicy (..)
+    , canonicalFilterPolicyBytes
     )
 import Cardano.Multisig.Publish
     ( OperatorSchedule (..)
@@ -88,7 +96,12 @@ import Cardano.Multisig.Store
     , Store (..)
     , entryIdFromTx
     )
-import Cardano.Multisig.Witness (assembleEntryTx)
+import Cardano.Multisig.Witness
+    ( assembleEntryTx
+    , entryMissingSigners
+    , entryWitnessStatus
+    , entryWitnesses
+    )
 import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Ledger (ConwayTx)
 import Codec.Binary.Bech32 qualified as Bech32
@@ -127,8 +140,12 @@ import Network.HTTP.Types
     ( hContentType
     , methodGet
     , methodPost
+    , methodPut
+    , parseQuery
     , status200
     , status201
+    , status204
+    , status401
     , status402
     , status404
     , status409
@@ -137,6 +154,8 @@ import Network.HTTP.Types
 import Network.Wai
     ( defaultRequest
     , pathInfo
+    , queryString
+    , rawQueryString
     , requestHeaders
     , requestMethod
     )
@@ -439,6 +458,105 @@ spec = do
                         ]
                     )
 
+        it "rejects signer filter policy updates signed by the wrong key" $ do
+            let body =
+                    object
+                        [ "predicate" .= object ["name" .= ("roster-open" :: Text)]
+                        , "signature" .= witnessHexText (testWitness 2 testTxForPolicy)
+                        ]
+            response <-
+                waiRequest
+                    methodPut
+                    (filterPolicyPath (signerHash 1))
+                    happyDeps
+                    (encode body)
+            simpleStatus response `shouldBe` status401
+
+    describe "Cardano.Multisig.Server filter HTTP routes" $ do
+        it
+            "filters explicit trust-ordered entries by trusted witness"
+            $ do
+                let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                    entryId = entryIdFromTx tx
+                    emptyDeps =
+                        happyDeps
+                            { mdEntries =
+                                Map.singleton entryId (storedEntry tx)
+                            }
+                    witnessedDeps =
+                        happyDeps
+                            { mdEntries =
+                                Map.singleton
+                                    entryId
+                                    ( storedEntryWithCollected
+                                        tx
+                                        [testWitness 2 tx]
+                                    )
+                            }
+                    path =
+                        entriesFilterPath
+                            (signerHash 1)
+                            "trust-ordered"
+                            (Just [signerHash 2])
+
+                hidden <- getJson path emptyDeps
+                hidden `shouldBe` object ["entries" .= ([] :: [Value])]
+
+                visible <- getJson path witnessedDeps
+                visible
+                    `shouldBe` object
+                        [ "entries"
+                            .= [entrySummaryJson (storedEntryWithCollected tx [testWitness 2 tx])]
+                        ]
+
+        it "returns zero-witness roster entries with roster-open" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                entry = storedEntry tx
+                deps =
+                    happyDeps
+                        { mdEntries = Map.singleton (entryIdFromTx tx) entry
+                        }
+            body <-
+                getJson
+                    (entriesFilterPath (signerHash 1) "roster-open" Nothing)
+                    deps
+            body `shouldBe` object ["entries" .= [entrySummaryJson entry]]
+
+        it "returns no roster-open entries to non-roster signers" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                deps =
+                    happyDeps
+                        { mdEntries =
+                            Map.singleton (entryIdFromTx tx) (storedEntry tx)
+                        }
+            body <-
+                getJson
+                    (entriesFilterPath (signerHash 3) "roster-open" Nothing)
+                    deps
+            body `shouldBe` object ["entries" .= ([] :: [Value])]
+
+        it "persists a signer default policy and uses it for entry lists" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                entry = storedEntry tx
+                deps =
+                    happyDeps
+                        { mdEntries = Map.singleton (entryIdFromTx tx) entry
+                        }
+                policy = RosterOpen
+                signer = signerHash 1
+            ref <- newIORef deps
+            putResponse <-
+                waiRequestWithRef
+                    methodPut
+                    (filterPolicyPath signer)
+                    ref
+                    (encode (policyBody policy (policyWitness 1 policy)))
+            simpleStatus putResponse `shouldBe` status204
+            simpleBody putResponse `shouldBe` mempty
+
+            body <- getJsonWithRef (entriesDefaultFilterPath signer) ref
+            body `shouldBe` object ["entries" .= [entrySummaryJson entry]]
+
     describe "Cardano.Multisig.Server submit and receipt HTTP routes" $ do
         it "returns 409 when submitting a non-ready entry" $ do
             let tx = testTx (SJust (SlotNo 125)) requiredSigners
@@ -526,6 +644,7 @@ data MockDeps = MockDeps
     , mdPreflight :: PreflightResult
     , mdEntries :: Map EntryId Entry
     , mdReceipts :: Map EntryId Receipt
+    , mdSignerFilters :: Map (KeyHash Guard) ByteString
     , mdSubmitResult :: Either Text ()
     , mdSubmitted :: [ConwayTx]
     , mdNow :: UTCTime
@@ -541,6 +660,7 @@ happyDeps =
             , mdPreflight = PreflightAccepted
             , mdEntries = mempty
             , mdReceipts = mempty
+            , mdSignerFilters = mempty
             , mdSubmitResult = Right ()
             , mdSubmitted = mempty
             , mdNow = receiptTime
@@ -570,6 +690,12 @@ postJson :: ByteString -> MockDeps -> Value -> IO SResponse
 postJson path deps body =
     waiRequest methodPost path deps (encode body)
 
+splitRequestTarget :: ByteString -> (ByteString, ByteString)
+splitRequestTarget =
+    BS.break (== questionMark)
+  where
+    questionMark = 0x3f
+
 waiRequest
     :: ByteString
     -> ByteString
@@ -587,21 +713,24 @@ waiRequestWithRef
     -> BL.ByteString
     -> IO SResponse
 waiRequestWithRef method path ref body =
-    runSession
-        ( srequest
-            SRequest
-                { simpleRequest =
-                    defaultRequest
-                        { requestMethod = method
-                        , pathInfo =
-                            filter (not . Text.null)
-                                $ Text.splitOn "/" (TextEncoding.decodeUtf8 path)
-                        , requestHeaders = [(hContentType, "application/json")]
-                        }
-                , simpleRequestBody = body
-                }
-        )
-        (applicationWith "preprod" schedule (mockServerDeps ref))
+    let (requestPath, requestQuery) = splitRequestTarget path
+    in  runSession
+            ( srequest
+                SRequest
+                    { simpleRequest =
+                        defaultRequest
+                            { requestMethod = method
+                            , pathInfo =
+                                filter (not . Text.null)
+                                    $ Text.splitOn "/" (TextEncoding.decodeUtf8 requestPath)
+                            , rawQueryString = requestQuery
+                            , queryString = parseQuery requestQuery
+                            , requestHeaders = [(hContentType, "application/json")]
+                            }
+                    , simpleRequestBody = body
+                    }
+            )
+            (applicationWith "preprod" schedule (mockServerDeps ref))
 
 mockServerDeps :: IORef MockDeps -> ServerDeps IO
 mockServerDeps ref =
@@ -625,7 +754,7 @@ mockPublishDeps ref =
         , pdReadPayment = \_ -> PaymentReadResolved . mdPayment <$> readIORef ref
         , pdPreflight = \_ -> mdPreflight <$> readIORef ref
         , pdStore =
-            Store
+            StoreWithFilters
                 { storePutEntry = \entry ->
                     atomicModifyIORef'
                         ref
@@ -642,6 +771,8 @@ mockPublishDeps ref =
                         )
                 , storeLookupEntry = \entryId ->
                     Map.lookup entryId . mdEntries <$> readIORef ref
+                , storeListEntries =
+                    Map.elems . mdEntries <$> readIORef ref
                 , storeCollectWitnesses = \entryId txWits ->
                     atomicModifyIORef'
                         ref
@@ -671,6 +802,22 @@ mockPublishDeps ref =
                         )
                 , storeLookupReceipt = \entryId ->
                     Map.lookup entryId . mdReceipts <$> readIORef ref
+                , storePutSignerFilter = \signer policy ->
+                    atomicModifyIORef'
+                        ref
+                        ( \s ->
+                            ( s
+                                { mdSignerFilters =
+                                    Map.insert
+                                        signer
+                                        policy
+                                        (mdSignerFilters s)
+                                }
+                            , ()
+                            )
+                        )
+                , storeLookupSignerFilter = \signer ->
+                    Map.lookup signer . mdSignerFilters <$> readIORef ref
                 }
         }
 
@@ -771,6 +918,63 @@ receiptPath :: EntryId -> ByteString
 receiptPath entryId =
     entryPath entryId <> "/receipt"
 
+filterPolicyPath :: KeyHash Guard -> ByteString
+filterPolicyPath signer =
+    TextEncoding.encodeUtf8
+        ("/v1/signers/" <> renderKeyHash signer <> "/filter")
+
+entriesFilterPath
+    :: KeyHash Guard
+    -> Text
+    -> Maybe [KeyHash Guard]
+    -> ByteString
+entriesFilterPath signer predicate allowlist =
+    TextEncoding.encodeUtf8
+        $ "/v1/entries?signer="
+            <> renderKeyHash signer
+            <> "&predicate="
+            <> predicate
+            <> foldMap
+                ( ("&allowlist=" <>)
+                    . Text.intercalate ","
+                    . fmap renderKeyHash
+                )
+                allowlist
+
+entriesDefaultFilterPath :: KeyHash Guard -> ByteString
+entriesDefaultFilterPath signer =
+    TextEncoding.encodeUtf8
+        $ "/v1/entries?signer="
+            <> renderKeyHash signer
+
+entrySummaryJson :: Entry -> Value
+entrySummaryJson entry@Entry{..} =
+    object
+        [ "entry_id" .= renderEntryId entryId
+        , "required_signers" .= renderKeyHashes entryRequiredSigners
+        , "witnesses" .= renderKeyHashes (entryWitnesses entry)
+        , "missing" .= renderKeyHashes (entryMissingSigners entry)
+        , "invalid_hereafter" .= renderSlot entryInvalidHereafter
+        , "status" .= renderEntryStatus (entryWitnessStatus entry)
+        ]
+
+policyBody :: FilterPolicy -> WitVKey Witness -> Value
+policyBody policy witness =
+    object
+        [ "predicate" .= policyPredicateJson policy
+        , "signature" .= witnessHexText witness
+        ]
+
+policyPredicateJson :: FilterPolicy -> Value
+policyPredicateJson = \case
+    RosterOpen ->
+        object ["name" .= ("roster-open" :: Text)]
+    TrustOrdered allowlist ->
+        object
+            [ "name" .= ("trust-ordered" :: Text)
+            , "allowlist" .= fmap renderKeyHash (Set.toAscList allowlist)
+            ]
+
 witnessBody :: WitVKey Witness -> Value
 witnessBody witness =
     object ["witness" .= witnessHexText witness]
@@ -788,6 +992,23 @@ testWitness n tx =
     sk = testKey n
     vk = VKey (deriveVerKeyDSIGN sk)
     bodyHash = extractHash (hashAnnotated (tx ^. bodyTxL))
+
+policyWitness :: Word -> FilterPolicy -> WitVKey Witness
+policyWitness n policy =
+    WitVKey (asWitness vk) (signedDSIGN sk (policyHash policy))
+  where
+    sk = testKey n
+    vk = VKey (deriveVerKeyDSIGN sk)
+
+-- Filter policies sign the ledger-typed hash of these documented
+-- canonical bytes, matching the WitVKey witness machinery.
+policyHash :: FilterPolicy -> Hash HASH EraIndependentTxBody
+policyHash =
+    Hash.castHash . Hash.hashWith @HASH id . canonicalFilterPolicyBytes
+
+testTxForPolicy :: ConwayTx
+testTxForPolicy =
+    testTx (SJust (SlotNo 125)) requiredSigners
 
 witnessSignerHash :: WitVKey Witness -> KeyHash Guard
 witnessSignerHash (WitVKey vkey _) =
@@ -856,3 +1077,14 @@ renderKeyHashes =
 renderKeyHash :: KeyHash kr -> Text
 renderKeyHash (KeyHash h) =
     TextEncoding.decodeUtf8 $ Base16.encode $ hashToBytes h
+
+renderEntryStatus :: EntryStatus -> Text
+renderEntryStatus = \case
+    EntryCollecting -> "collecting"
+    EntryReady -> "ready"
+    EntrySubmitted -> "submitted"
+    EntryExpired -> "expired"
+
+renderSlot :: SlotNo -> Word64
+renderSlot (SlotNo slot) =
+    slot

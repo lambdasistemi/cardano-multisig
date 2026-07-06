@@ -6,6 +6,7 @@ where
 
 import Cardano.Multisig.Store
     ( Entry (..)
+    , EntryId
     , Store (..)
     , decodeEntry
     , decodeReceipt
@@ -17,6 +18,7 @@ import Cardano.Multisig.Store.Columns
     , codecs
     )
 import Data.ByteString (ByteString)
+import Database.KV.Cursor qualified as Cursor
 import Database.KV.Database (Database, mkColumns)
 import Database.KV.RocksDB (mkRocksDBDatabase)
 import Database.KV.Transaction qualified as KV
@@ -39,13 +41,17 @@ mkRocksDBStore
     :: KV.RunTransaction IO ColumnFamily Columns BatchOp
     -> Store IO
 mkRocksDBStore (KV.RunTransaction runTx) =
-    Store
+    StoreWithFilters
         { storePutEntry = \entry ->
             runTx $ KV.insert EntriesCol (entryId entry) (encodeEntry entry)
         , storeLookupEntry = \eid ->
             runTx
                 $ decodeStored "entry" decodeEntry
                     <$> KV.query EntriesCol eid
+        , storeListEntries =
+            runTx
+                $ KV.iterating EntriesCol
+                $ collectEntries []
         , storeCollectWitnesses = \eid witnesses ->
             runTx $ do
                 current <-
@@ -66,6 +72,10 @@ mkRocksDBStore (KV.RunTransaction runTx) =
             runTx
                 $ decodeStored "receipt" decodeReceipt
                     <$> KV.query ReceiptsCol eid
+        , storePutSignerFilter = \signer policy ->
+            runTx $ KV.insert SignerFiltersCol signer policy
+        , storeLookupSignerFilter =
+            runTx . KV.query SignerFiltersCol
         }
 
 mkStoreDatabase :: DB -> Database IO ColumnFamily Columns BatchOp
@@ -88,6 +98,7 @@ storeColumnFamilies :: [(String, Config)]
 storeColumnFamilies =
     [ ("entries", storeConfig)
     , ("receipts", storeConfig)
+    , ("signer_filters", storeConfig)
     ]
 
 storeConfig :: Config
@@ -100,3 +111,21 @@ storeConfig =
         , prefixLength = Nothing
         , bloomFilter = False
         }
+
+collectEntries
+    :: [Entry]
+    -> Cursor.Cursor
+        (KV.Transaction IO ColumnFamily Columns BatchOp)
+        (KV.KV EntryId ByteString)
+        [Entry]
+collectEntries acc = do
+    next <-
+        if null acc
+            then Cursor.firstEntry
+            else Cursor.nextEntry
+    case next of
+        Nothing -> pure (reverse acc)
+        Just Cursor.Entry{Cursor.entryValue = bytes} ->
+            case decodeStored "entry" decodeEntry (Just bytes) of
+                Nothing -> collectEntries acc
+                Just entry -> collectEntries (entry : acc)
