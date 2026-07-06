@@ -2,12 +2,12 @@
 
 ## Slice 1: Devnet Server Run Recipe
 
-- [ ] T001 Add a flake app for the existing `cardano-multisig-server`
+- [X] T001 Add a flake app for the existing `cardano-multisig-server`
   executable without changing executable behavior.
-- [ ] T002 Add a `just` recipe that runs the server against a devnet node
+- [X] T002 Add a `just` recipe that runs the server against a devnet node
   using the existing runtime env surface, defaulting
   `CARDANO_NODE_MAGIC=42`.
-- [ ] T003 Add a MkDocs runbook and navigation entry documenting the devnet
+- [X] T003 Add a MkDocs runbook and navigation entry documenting the devnet
   env, fee schedule, store path, and fixed publish confirmation depth.
 
 ## Slice 2: Partial-Witness Regression Tests

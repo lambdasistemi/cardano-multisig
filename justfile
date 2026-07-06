@@ -65,6 +65,19 @@ devnet-publish-smoke:
     set -euo pipefail
     nix run --quiet .#devnet-publish-smoke
 
+# Run the server against a devnet node
+devnet-server:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${CARDANO_NODE_SOCKET:?set to the devnet node socket path}"
+    export CARDANO_NODE_MAGIC="${CARDANO_NODE_MAGIC:-42}"
+    : "${CARDANO_MULTISIG_STORE:?set to the server RocksDB store path}"
+    : "${FEE_ADDRESS:?set to the devnet fee payment address}"
+    : "${BASE_LOVELACE:?set to the fixed fee floor in lovelace}"
+    : "${RATE_LOVELACE_PER_SLOT:?set to the fee rate per TTL slot}"
+    : "${TTL_HORIZON_SLOTS:?set to the accepted TTL horizon in slots}"
+    exec nix run --quiet .#cardano-multisig-server
+
 # Opt-in live N2C smoke against the preprod node on development.
 live-chain-payment-read:
     #!/usr/bin/env bash

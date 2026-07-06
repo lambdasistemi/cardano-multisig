@@ -32,6 +32,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Devnet runbook: devnet-run.md
   - Architecture:
       - architecture/index.md
       - Trust model: architecture/trust-model.md
