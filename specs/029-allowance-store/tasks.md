@@ -1,0 +1,42 @@
+# Tasks: Allowance Store Model
+
+## Slice 0 - Orchestrator Bootstrap
+
+- [X] T000-S0 ORCHESTRATOR-OWNED Refresh `main`, create worktree
+  `/code/cardano-multisig-29`, branch `feat/allowance-store`.
+- [X] T000-S0 ORCHESTRATOR-OWNED Add the PR-local `gate.sh`, enforce the
+  repository-wide forbidden-token grep, and run `./gate.sh` on the baseline.
+- [X] T000-S0 ORCHESTRATOR-OWNED Push branch and open draft PR #34 linked to
+  issue #29.
+
+## Slice 1 - Store Model and RocksDB Behavior
+
+- [ ] T001-S1 Add public `FeePayment` and `FeeAllowance` store model types.
+- [ ] T001-S1 Add fee-payment key/value codecs and the RocksDB fee-payment
+  column family.
+- [ ] T001-S1 Extend the public `Store` API with upsert, rollback-from-slot,
+  and allowance lookup operations.
+- [ ] T001-S1 Implement RocksDB upsert, rollback, and allowance lookup using
+  the existing transaction discipline.
+- [ ] T001-S1 Update in-repo `StoreWithFilters` test mocks to compile with the
+  widened store API.
+- [ ] T001-S1 Add temp-RocksDB unit tests for multi-payment sum, idempotent
+  reinsertion, exact rollback removal, finality-depth filtering, and pending
+  payment reporting.
+- [ ] T001-S1 Run
+  `nix develop --quiet -c just unit "Cardano.Multisig.Store.RocksDB"` and
+  `./gate.sh`.
+- [ ] T001-S1 Commit as `feat: add allowance store model` with trailer
+  `Tasks: T001`.
+
+## Slice 2 - Orchestrator-Owned Finalization
+
+- [ ] T002-S2 ORCHESTRATOR-OWNED Verify every implementation task is checked
+  and rerun `./gate.sh` at HEAD.
+- [ ] T002-S2 ORCHESTRATOR-OWNED Verify GitHub CI for PR #34 is green and log
+  `CI-PASS`.
+- [ ] T002-S2 ORCHESTRATOR-OWNED Update PR #34 body with delivered behavior,
+  tests, and the hard-rule grep evidence.
+- [ ] T002-S2 ORCHESTRATOR-OWNED Drop `gate.sh`, commit
+  `chore: drop gate.sh (ready for review)`, and mark PR #34 ready.
+- [ ] T002-S2 ORCHESTRATOR-OWNED Append `READY` and `COMPLETE`; do not merge.
