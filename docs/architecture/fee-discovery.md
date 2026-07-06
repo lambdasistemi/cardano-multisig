@@ -161,20 +161,42 @@ what was rejected and why — this is where to push back.
     durable "I saw it"), needs HD-address management, and the durable
     allowance record we want is exactly what the indexer provides.
 
+## The malformed-payment tax {#malformed-tax}
+
+`fee_metadata_malformed` exists only because metadata is an **unenforced tag
+on an irreversible payment**: nothing stops a payer committing funds with a
+garbled tag, so the error is discoverable only *after* the money is gone. The
+indexer's malformed side-record is M1's honest mitigation — but the whole
+category is a **tax on the metadata + zero-validator combination**, not a fact
+of nature. The cure is *enforcement* — reject the malformed thing before value
+moves — and enforcement is exactly what M1 forgoes to stay validator-free.
+
 ## The M2 direction (deferred, staged to be grilled)
 
-There is a more ambitious, more *marketable* design on the roadmap —
+A more ambitious, more *marketable* design —
 [issue #27](https://github.com/lambdasistemi/cardano-multisig/issues/27) —
-that could **retire the indexer** by pushing the payment proof to the client:
+removes the malformed-tax category (and can retire the indexer):
 
-- **Subbit-style payment channels** — per-request payment as an off-chain
-  signed voucher; nothing to index. Cost: it is an on-chain *validator*
-  (collides with the zero-validator invariant) and adds a channel lifecycle;
-  only pays off at high request volume.
-- **Client-supplied CSMT inclusion proofs** — the requester proves the
-  payment UTxO exists against a trusted `utxo-csmt` root; no per-address
-  follower. Cost: "no follower" is really *relocation* — the service needs a
-  trusted, current root, and this reopens the tag-in-output decision.
+- **Subbit-style payment channels (the clean escape).** Payment-validation
+  moves **off-chain into a synchronous HTTP exchange**: a signed sub-payment
+  voucher rides each request, and a protocol-mismatched voucher is a **4xx/503
+  at request time, before any value moves**. No chain footprint, no indexer,
+  no malformed-recording — a bad payment is a rejected request you retry, not
+  lost ADA you discover later. Cost: it is an on-chain *validator* (collides
+  with the zero-validator invariant) + a channel lifecycle + capital lockup;
+  pays off only at high request volume.
+- **Minting a fee-token (better than metadata, with the datum's ghosts).** A
+  minted token lives **in the UTxO set** (metadata does not) → LSQ-readable →
+  could retire the indexer; a **Plutus** minting policy could *enforce*
+  `asset-name = body-hash` so a malformed mint never validates. But the
+  enforcement leg needs Plutus (a minting policy is what Principle VI forbids),
+  a native policy can't inspect names (no enforcement), and a native-asset
+  output reinflates min-UTxO and forces a script-bearing tx — the
+  [datum's wallet-hostility](#alternatives-considered) returns.
+- **Client-supplied CSMT inclusion proofs.** The requester proves the payment
+  UTxO exists against a trusted `utxo-csmt` root; no per-address follower.
+  Cost: "no follower" is really *relocation* — the service needs a trusted,
+  current root, and this reopens the tag-in-output decision.
 
-Both are **explicitly M2** and gated on real need. See #27 for the full
+All are **explicitly M2** and gated on real need. See #27 for the full
 grilling.
