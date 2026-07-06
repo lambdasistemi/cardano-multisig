@@ -2,67 +2,66 @@
 {-# LANGUAGE TypeApplications #-}
 
 module Cardano.Multisig.Publish
-    ( FeeQuote (..)
+    ( FeeReason (..)
+    , FeeQuote (..)
+    , FeeStatus (..)
     , OperatorSchedule (..)
     , PreflightResult (..)
     , PublishDeps (..)
     , PublishFailure (..)
     , PublishRequest (..)
-    , bodyHashTagDatum
     , publishEntry
     , quoteTx
     )
 where
 
+import Cardano.Crypto.Hash (hashFromBytes)
 import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Address (Addr)
 import Cardano.Ledger.Allegra.Scripts (ValidityInterval (..))
 import Cardano.Ledger.Api.Era (eraProtVerLow)
-import Cardano.Ledger.Api.Scripts.Data (Datum (..))
 import Cardano.Ledger.Api.Tx (bodyTxL)
 import Cardano.Ledger.Api.Tx.Body
     ( reqSignerHashesTxBodyL
     , vldtTxBodyL
     )
-import Cardano.Ledger.BaseTypes (Network, StrictMaybe (..))
+import Cardano.Ledger.BaseTypes
+    ( Network
+    , StrictMaybe (..)
+    , TxIx (..)
+    )
 import Cardano.Ledger.Binary
     ( Annotator
     , DecCBOR (..)
     , Decoder
     , decodeFullAnnotator
     )
-import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
-import Cardano.Ledger.Hashes (extractHash)
-import Cardano.Ledger.Mary.Value (MaryValue (..))
-import Cardano.Ledger.Plutus.Data
-    ( Data (Data)
-    , dataToBinaryData
-    )
-import Cardano.Ledger.TxIn (TxId (..), TxIn)
-import Cardano.Multisig.Chain
-    ( PaymentConfirmation (..)
-    , PaymentReadResult (..)
-    )
+import Cardano.Ledger.Hashes (extractHash, unsafeMakeSafeHash)
+import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Multisig.Store
     ( Entry (..)
     , EntryId (..)
     , EntryStatus (..)
+    , FeeAllowance (..)
+    , MalformedFeePayment (..)
     , Store (..)
     , entryIdFromTx
     )
 import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Ledger (ConwayTx)
 import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as Base16
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as BL
 import Data.Char (isSpace)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TextEncoding
 import Data.Word (Word64)
 import Lens.Micro ((^.))
-import PlutusLedgerApi.V1 qualified as Plutus
 
 data OperatorSchedule = OperatorSchedule
     { osNetwork :: Network
@@ -77,14 +76,14 @@ data FeeQuote = FeeQuote
     { qBodyHash :: EntryId
     , qRequiredFeeLovelace :: Integer
     , qFeeAddress :: Addr
-    , qTag :: Datum ConwayEra
+    , qTag :: Text
     , qInvalidHereafter :: SlotNo
     }
     deriving stock (Eq, Show)
 
 data PublishRequest = PublishRequest
     { prTxCborHex :: ByteString
-    , prFeePayment :: TxIn
+    , prFeePayment :: Maybe TxIn
     }
     deriving stock (Eq, Show)
 
@@ -95,10 +94,27 @@ data PreflightResult
 
 data PublishDeps m = PublishDeps
     { pdReadTip :: m SlotNo
-    , pdReadPayment :: TxIn -> m PaymentReadResult
     , pdPreflight :: ConwayTx -> m PreflightResult
     , pdStore :: Store m
     }
+
+data FeeReason
+    = FeeNotSeen
+    | FeeUnconfirmed
+    | FeeInsufficient
+    | FeeMetadataMalformed
+    deriving stock (Eq, Show)
+
+data FeeStatus = FeeStatus
+    { feeStatusBodyHash :: EntryId
+    , feeStatusRequiredLovelace :: Integer
+    , feeStatusPaidLovelace :: Word64
+    , feeStatusRequiredDepth :: Word
+    , feeStatusHasUnconfirmed :: Bool
+    , feeStatusReason :: FeeReason
+    , feeStatusMalformedPayment :: Maybe TxIn
+    }
+    deriving stock (Eq, Show)
 
 data PublishFailure
     = PublishDecodeFailed Text
@@ -107,13 +123,7 @@ data PublishFailure
         { pfInvalidHereafter :: SlotNo
         , pfHorizon :: SlotNo
         }
-    | PublishFeeMissing
-    | PublishFeeWrongAddress
-    | PublishFeeTagMismatch
-    | PublishFeeInsufficient
-        { pfRequiredLovelace :: Integer
-        , pfPaidLovelace :: Integer
-        }
+    | PublishFeeRejected FeeStatus
     | PublishPreflightFailed Text
     | PublishDuplicate EntryId
     deriving stock (Eq, Show)
@@ -133,7 +143,7 @@ quoteTx schedule tip txHex = do
             , qRequiredFeeLovelace =
                 requiredFee schedule tip invalidHereafter
             , qFeeAddress = osFeeAddress schedule
-            , qTag = bodyHashTagDatum bodyHash
+            , qTag = renderEntryId bodyHash
             , qInvalidHereafter = invalidHereafter
             }
 
@@ -151,9 +161,8 @@ publishEntry schedule deps request =
             case quoteFromTx schedule tip tx of
                 Left err -> pure (Left err)
                 Right quote -> do
-                    payment <-
-                        pdReadPayment deps (prFeePayment request)
-                    case verifyPayment schedule quote payment of
+                    feeResult <- verifyFeeAllowance deps quote tip request
+                    case feeResult of
                         Left err -> pure (Left err)
                         Right () -> do
                             preflight <- pdPreflight deps tx
@@ -171,14 +180,6 @@ publishEntry schedule deps request =
                                         quote
                                         tip
                                         request
-
-bodyHashTagDatum :: EntryId -> Datum ConwayEra
-bodyHashTagDatum (EntryId (TxId safeHash)) =
-    Datum
-        $ dataToBinaryData
-        $ Data
-        $ Plutus.B
-        $ hashToBytes (extractHash safeHash)
 
 decodeTxHex :: ByteString -> Either PublishFailure ConwayTx
 decodeTxHex txHex = do
@@ -220,7 +221,7 @@ quoteFromTx schedule tip tx = do
             , qRequiredFeeLovelace =
                 requiredFee schedule tip invalidHereafter
             , qFeeAddress = osFeeAddress schedule
-            , qTag = bodyHashTagDatum bodyHash
+            , qTag = renderEntryId bodyHash
             , qInvalidHereafter = invalidHereafter
             }
 
@@ -236,31 +237,50 @@ requiredFee schedule (SlotNo tip) (SlotNo invalidHereafter) =
         + osRateLovelacePerSlot schedule
             * max 0 (fromIntegral invalidHereafter - fromIntegral tip)
 
-verifyPayment
-    :: OperatorSchedule
-    -> FeeQuote
-    -> PaymentReadResult
-    -> Either PublishFailure ()
-verifyPayment _schedule quote = \case
-    PaymentReadMissing{} -> Left PublishFeeMissing
-    PaymentReadResolved confirmation
-        | pcAddress confirmation /= qFeeAddress quote ->
-            Left PublishFeeWrongAddress
-        | pcDatum confirmation /= qTag quote ->
-            Left PublishFeeTagMismatch
-        | paid < qRequiredFeeLovelace quote ->
-            Left
-                PublishFeeInsufficient
-                    { pfRequiredLovelace = qRequiredFeeLovelace quote
-                    , pfPaidLovelace = paid
-                    }
-        | otherwise -> Right ()
-      where
-        paid = lovelaceOf (pcValue confirmation)
+publishRequiredConfirmationDepth :: Word
+publishRequiredConfirmationDepth =
+    5
 
-lovelaceOf :: MaryValue -> Integer
-lovelaceOf (MaryValue (Coin lovelace) _) =
-    lovelace
+verifyFeeAllowance
+    :: Monad m
+    => PublishDeps m
+    -> FeeQuote
+    -> SlotNo
+    -> PublishRequest
+    -> m (Either PublishFailure ())
+verifyFeeAllowance deps quote tip request = do
+    allowance <-
+        storeAllowanceFor
+            (pdStore deps)
+            (qBodyHash quote)
+            tip
+            publishRequiredConfirmationDepth
+    if fromIntegral (allowanceLovelace allowance)
+        >= qRequiredFeeLovelace quote
+        then pure (Right ())
+        else do
+            malformed <- case prFeePayment request of
+                Nothing -> pure Nothing
+                Just txIn -> storeMalformedFeePayment (pdStore deps) txIn
+            let reason =
+                    case malformed of
+                        Just{} -> FeeMetadataMalformed
+                        Nothing
+                            | allowanceHasUnconfirmed allowance -> FeeUnconfirmed
+                            | allowanceLovelace allowance > 0 -> FeeInsufficient
+                            | otherwise -> FeeNotSeen
+            pure
+                $ Left
+                $ PublishFeeRejected
+                    FeeStatus
+                        { feeStatusBodyHash = qBodyHash quote
+                        , feeStatusRequiredLovelace = qRequiredFeeLovelace quote
+                        , feeStatusPaidLovelace = allowanceLovelace allowance
+                        , feeStatusRequiredDepth = allowanceRequiredDepth allowance
+                        , feeStatusHasUnconfirmed = allowanceHasUnconfirmed allowance
+                        , feeStatusReason = reason
+                        , feeStatusMalformedPayment = malformedFeePaymentTxIn <$> malformed
+                        }
 
 enforceHorizonAndPersist
     :: Monad m
@@ -307,6 +327,24 @@ buildEntry tx quote request =
             tx ^. bodyTxL . reqSignerHashesTxBodyL
         , entryCollectedWitnesses = mempty
         , entryInvalidHereafter = qInvalidHereafter quote
-        , entryFeePayment = prFeePayment request
+        , entryFeePayment = fromMaybe inertFeePayment (prFeePayment request)
         , entryStatus = EntryCollecting
         }
+
+inertFeePayment :: TxIn
+inertFeePayment =
+    TxIn
+        (TxId $ unsafeMakeSafeHash zeroHash)
+        (TxIx 0)
+  where
+    zeroHash =
+        case hashFromBytes (BS.replicate 32 0) of
+            Just h -> h
+            Nothing -> error "inertFeePayment: invalid hash length"
+
+renderEntryId :: EntryId -> Text
+renderEntryId (EntryId (TxId safeHash)) =
+    TextEncoding.decodeUtf8
+        $ Base16.encode
+        $ hashToBytes
+        $ extractHash safeHash

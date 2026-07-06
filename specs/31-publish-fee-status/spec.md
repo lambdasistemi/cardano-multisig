@@ -18,9 +18,8 @@ not accepted.
 
 ## Functional Requirements
 
-- `Cardano.Multisig.Publish` removes the datum path entirely:
-  `bodyHashTagDatum` is not exported or defined, and `fee_tag_mismatch` is not a
-  possible publish failure.
+- `Cardano.Multisig.Publish` removes the old datum-tag helper entirely, and the
+  old tag-mismatch publish failure is not a possible result.
 - `PublishRequest.fee_payment` is optional and no longer binds authorization.
   Admission depends on `storeAllowanceFor bodyHash tip requiredDepth`.
 - A publish request is admitted when the final indexed allowance is greater than
@@ -59,8 +58,8 @@ not accepted.
   allowances.
 - Unit tests cover fee-status readiness and each named fee reason, including
   `fee_metadata_malformed` through optional `payment`.
-- `bodyHashTagDatum` and `fee_tag_mismatch` are absent from implementation and
-  tests at the end of the PR.
+- The old datum-tag helper and old tag-mismatch reason are absent from
+  implementation and tests at the end of the PR.
 - `src/Cardano/Multisig/Server.hs` keeps #30's fee-indexer startup wiring while
   adding the new handler behavior.
 - Local gates pass: `nix build .#cardano-multisig .#unit-tests`,
