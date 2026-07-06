@@ -93,6 +93,7 @@ import Cardano.Multisig.Store
     ( Entry (..)
     , EntryId (..)
     , EntryStatus (..)
+    , FeeAllowance (..)
     , Receipt (..)
     , Store (..)
     , entryIdFromTx
@@ -875,6 +876,10 @@ mockPublishDeps ref =
                         )
                 , storeLookupSignerFilter = \signer ->
                     Map.lookup signer . mdSignerFilters <$> readIORef ref
+                , storeUpsertFeePayment = \_ -> pure ()
+                , storeRollbackFeePaymentsFrom = \_ -> pure ()
+                , storeAllowanceFor = \_ _ depth ->
+                    pure (FeeAllowance 0 depth False)
                 }
         }
 

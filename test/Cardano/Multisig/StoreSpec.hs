@@ -44,7 +44,10 @@ import Cardano.Ledger.Keys
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Multisig.Store
     ( Entry (..)
+    , EntryId (..)
     , EntryStatus (..)
+    , FeeAllowance (..)
+    , FeePayment (..)
     , Receipt (..)
     , Store (..)
     , entryIdFromTx
@@ -58,7 +61,7 @@ import Data.Foldable (fold)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
-import Data.Word (Word8)
+import Data.Word (Word64, Word8)
 import Lens.Micro ((%~), (&), (.~))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldReturn)
@@ -115,6 +118,74 @@ spec =
                     stored <- storeLookupEntry store (entryId entry)
                     fmap entryCollectedWitnesses stored
                         `shouldBe` Just (fold witnesses)
+
+        it "sums multiple final fee payments for the same body hash"
+            $ withStore
+            $ \store -> do
+                let bodyHash = bodyHashN 1
+                    otherBodyHash = bodyHashN 2
+                storeUpsertFeePayment store
+                    $ testFeePayment bodyHash 1 1_000 10
+                storeUpsertFeePayment store
+                    $ testFeePayment bodyHash 2 2_500 11
+                storeUpsertFeePayment store
+                    $ testFeePayment otherBodyHash 3 9_999 10
+                storeAllowanceFor store bodyHash (SlotNo 20) 5
+                    `shouldReturn` FeeAllowance 3_500 5 False
+
+        it "does not double count reinserting the same fee payment"
+            $ withStore
+            $ \store -> do
+                let bodyHash = bodyHashN 1
+                    payment = testFeePayment bodyHash 1 1_000 10
+                storeUpsertFeePayment store payment
+                storeUpsertFeePayment store payment
+                storeAllowanceFor store bodyHash (SlotNo 20) 5
+                    `shouldReturn` FeeAllowance 1_000 5 False
+
+        it "rolls back fee payments after the rollback slot exactly"
+            $ withStore
+            $ \store -> do
+                let bodyHash = bodyHashN 1
+                    otherBodyHash = bodyHashN 2
+                storeUpsertFeePayment store
+                    $ testFeePayment bodyHash 1 1_000 10
+                storeUpsertFeePayment store
+                    $ testFeePayment bodyHash 2 2_000 11
+                storeUpsertFeePayment store
+                    $ testFeePayment bodyHash 3 4_000 12
+                storeUpsertFeePayment store
+                    $ testFeePayment otherBodyHash 4 8_000 12
+                storeRollbackFeePaymentsFrom store (SlotNo 11)
+                storeAllowanceFor store bodyHash (SlotNo 20) 1
+                    `shouldReturn` FeeAllowance 3_000 1 False
+                storeAllowanceFor store otherBodyHash (SlotNo 20) 1
+                    `shouldReturn` FeeAllowance 0 1 False
+
+        it "counts only fee payments final at the requested depth"
+            $ withStore
+            $ \store -> do
+                let bodyHash = bodyHashN 1
+                storeUpsertFeePayment store
+                    $ testFeePayment bodyHash 1 1_000 10
+                storeUpsertFeePayment store
+                    $ testFeePayment bodyHash 2 2_000 16
+                storeAllowanceFor store bodyHash (SlotNo 20) 5
+                    `shouldReturn` FeeAllowance 1_000 5 True
+
+        it "reports pending fee payments without counting them"
+            $ withStore
+            $ \store -> do
+                let bodyHash = bodyHashN 1
+                storeUpsertFeePayment store
+                    $ testFeePayment bodyHash 1 1_000 10
+                storeAllowanceFor store bodyHash (SlotNo 12) 5
+                    `shouldReturn` FeeAllowance 0 5 True
+
+withStore :: (Store IO -> IO a) -> IO a
+withStore action =
+    withSystemTempDirectory "cardano-multisig-store" $ \dir ->
+        withRocksDBStore dir action
 
 shouldReturnEntry :: IO (Maybe Entry) -> Maybe Entry -> IO ()
 shouldReturnEntry action expected = do
@@ -181,6 +252,24 @@ mkTxIn n =
     TxIn
         (TxId $ unsafeMakeSafeHash $ mkHash32 (fromIntegral n))
         (TxIx (fromIntegral n))
+
+bodyHashN :: Word8 -> EntryId
+bodyHashN n =
+    EntryId (TxId $ unsafeMakeSafeHash $ mkHash32 n)
+
+testFeePayment
+    :: EntryId
+    -> Word
+    -> Word64
+    -> Word64
+    -> FeePayment
+testFeePayment bodyHash txIn lovelace slot =
+    FeePayment
+        { feePaymentBodyHash = bodyHash
+        , feePaymentTxIn = mkTxIn txIn
+        , feePaymentLovelace = lovelace
+        , feePaymentBlockSlot = SlotNo slot
+        }
 
 mkHash32 :: (HashAlgorithm h) => Word8 -> Hash h a
 mkHash32 n =
