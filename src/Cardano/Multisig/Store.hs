@@ -6,11 +6,15 @@ module Cardano.Multisig.Store
     ( Entry (..)
     , EntryId (..)
     , EntryStatus (..)
+    , FeeAllowance (..)
+    , FeePayment (..)
     , Receipt (..)
     , Store (..)
     , decodeEntry
+    , decodeFeePayment
     , decodeReceipt
     , encodeEntry
+    , encodeFeePayment
     , encodeReceipt
     , entryIdFromTx
     )
@@ -46,6 +50,7 @@ import Data.Time.Clock.POSIX
     ( posixSecondsToUTCTime
     , utcTimeToPOSIXSeconds
     )
+import Data.Word (Word64)
 import Lens.Micro ((^.))
 
 newtype EntryId = EntryId
@@ -77,6 +82,21 @@ data Entry = Entry
     }
     deriving stock (Eq, Show)
 
+data FeePayment = FeePayment
+    { feePaymentBodyHash :: EntryId
+    , feePaymentTxIn :: TxIn
+    , feePaymentLovelace :: Word64
+    , feePaymentBlockSlot :: SlotNo
+    }
+    deriving stock (Eq, Show)
+
+data FeeAllowance = FeeAllowance
+    { allowanceLovelace :: Word64
+    , allowanceRequiredDepth :: Word
+    , allowanceHasUnconfirmed :: Bool
+    }
+    deriving stock (Eq, Show)
+
 data Store m
     = Store
         { storePutEntry :: Entry -> m ()
@@ -94,6 +114,9 @@ data Store m
         , storeLookupReceipt :: EntryId -> m (Maybe Receipt)
         , storePutSignerFilter :: KeyHash Guard -> ByteString -> m ()
         , storeLookupSignerFilter :: KeyHash Guard -> m (Maybe ByteString)
+        , storeUpsertFeePayment :: FeePayment -> m ()
+        , storeRollbackFeePaymentsFrom :: SlotNo -> m ()
+        , storeAllowanceFor :: EntryId -> SlotNo -> Word -> m FeeAllowance
         }
 
 entryIdFromTx :: ConwayTx -> EntryId
@@ -135,6 +158,31 @@ decodeEntry =
                 , entryInvalidHereafter = decodedEntryInvalidHereafter
                 , entryFeePayment = decodedEntryFeePayment
                 , entryStatus = decodedEntryStatus
+                }
+
+encodeFeePayment :: FeePayment -> ByteString
+encodeFeePayment FeePayment{..} =
+    encodeCBOR
+        $ CBOR.encodeListLen 4
+            <> CBOR.encodeBytes (encodeEntryId feePaymentBodyHash)
+            <> CBOR.encodeBytes (encodeLedger feePaymentTxIn)
+            <> CBOR.encodeWord64 feePaymentLovelace
+            <> CBOR.encodeBytes (encodeLedger feePaymentBlockSlot)
+
+decodeFeePayment :: ByteString -> Maybe FeePayment
+decodeFeePayment =
+    decodeCBOR $ do
+        decodeListLenOf 4
+        decodedBodyHash <- decodeBytesWith decodeEntryId
+        decodedTxIn <- decodeBytesWith decodeLedger
+        decodedLovelace <- CBOR.decodeWord64
+        decodedBlockSlot <- decodeBytesWith decodeLedger
+        pure
+            FeePayment
+                { feePaymentBodyHash = decodedBodyHash
+                , feePaymentTxIn = decodedTxIn
+                , feePaymentLovelace = decodedLovelace
+                , feePaymentBlockSlot = decodedBlockSlot
                 }
 
 encodeReceipt :: Receipt -> ByteString

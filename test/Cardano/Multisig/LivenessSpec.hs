@@ -46,6 +46,7 @@ import Cardano.Multisig.Store
     ( Entry (..)
     , EntryId
     , EntryStatus (..)
+    , FeeAllowance (..)
     , Store (..)
     , entryIdFromTx
     )
@@ -156,6 +157,10 @@ mockLivenessDeps =
                 , storeLookupReceipt = \_ -> pure Nothing
                 , storePutSignerFilter = \_ _ -> pure ()
                 , storeLookupSignerFilter = \_ -> pure Nothing
+                , storeUpsertFeePayment = \_ -> pure ()
+                , storeRollbackFeePaymentsFrom = \_ -> pure ()
+                , storeAllowanceFor = \_ _ depth ->
+                    pure (FeeAllowance 0 depth False)
                 }
         }
 
