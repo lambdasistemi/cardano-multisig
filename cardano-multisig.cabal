@@ -50,6 +50,7 @@ library
   exposed-modules:
     Cardano.Multisig.Chain
     Cardano.Multisig.Filter
+    Cardano.Multisig.Liveness
     Cardano.Multisig.Publish
     Cardano.Multisig.Server
     Cardano.Multisig.Store
@@ -112,6 +113,7 @@ test-suite unit-tests
   other-modules:
     Cardano.Multisig.ChainSpec
     Cardano.Multisig.FilterSpec
+    Cardano.Multisig.LivenessSpec
     Cardano.Multisig.PublishSpec
     Cardano.Multisig.ServerSpec
     Cardano.Multisig.StoreSpec
