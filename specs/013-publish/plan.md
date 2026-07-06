@@ -96,7 +96,7 @@ Focused verification:
   both `ChainSource` and a payment-reader function built from the provider,
   while keeping public E2 interfaces unchanged.
 - Fee-address comparison may require a bech32 parse or render helper from
-  ledger/cardano-api. The driver should use local Hoogle and sibling repo
+  ledger support packages. The driver should use local Hoogle and sibling repo
   patterns instead of adding an ad-hoc text comparison if the payment reader
   exposes ledger `Addr`.
 - The exact `Verdict` success representation is from `cardano-tx-tools`; tests
