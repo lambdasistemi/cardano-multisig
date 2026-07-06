@@ -77,13 +77,24 @@ data Entry = Entry
     }
     deriving stock (Eq, Show)
 
-data Store m = Store
-    { storePutEntry :: Entry -> m ()
-    , storeLookupEntry :: EntryId -> m (Maybe Entry)
-    , storeCollectWitnesses :: EntryId -> TxWits ConwayEra -> m ()
-    , storePutReceipt :: EntryId -> Receipt -> m ()
-    , storeLookupReceipt :: EntryId -> m (Maybe Receipt)
-    }
+data Store m
+    = Store
+        { storePutEntry :: Entry -> m ()
+        , storeLookupEntry :: EntryId -> m (Maybe Entry)
+        , storeCollectWitnesses :: EntryId -> TxWits ConwayEra -> m ()
+        , storePutReceipt :: EntryId -> Receipt -> m ()
+        , storeLookupReceipt :: EntryId -> m (Maybe Receipt)
+        }
+    | StoreWithFilters
+        { storePutEntry :: Entry -> m ()
+        , storeLookupEntry :: EntryId -> m (Maybe Entry)
+        , storeListEntries :: m [Entry]
+        , storeCollectWitnesses :: EntryId -> TxWits ConwayEra -> m ()
+        , storePutReceipt :: EntryId -> Receipt -> m ()
+        , storeLookupReceipt :: EntryId -> m (Maybe Receipt)
+        , storePutSignerFilter :: KeyHash Guard -> ByteString -> m ()
+        , storeLookupSignerFilter :: KeyHash Guard -> m (Maybe ByteString)
+        }
 
 entryIdFromTx :: ConwayTx -> EntryId
 entryIdFromTx tx =
