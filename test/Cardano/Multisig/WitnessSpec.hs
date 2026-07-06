@@ -11,10 +11,22 @@ import Cardano.Crypto.DSIGN
     , deriveVerKeyDSIGN
     , genKeyDSIGN
     )
-import Cardano.Crypto.Hash (hashFromBytes)
+import Cardano.Crypto.Hash (hashFromBytes, hashFromStringAsHex)
 import Cardano.Crypto.Hash.Class (Hash, HashAlgorithm)
 import Cardano.Crypto.Seed (mkSeedFromBytes)
-import Cardano.Ledger.Allegra.Scripts (ValidityInterval (..))
+import Cardano.Ledger.Allegra.Scripts
+    ( ValidityInterval (..)
+    , mkRequireSignatureTimelock
+    )
+import Cardano.Ledger.Alonzo.Scripts (AlonzoScript (NativeScript))
+import Cardano.Ledger.Alonzo.TxBody
+    ( ScriptIntegrityHash
+    , scriptIntegrityHashTxBodyL
+    )
+import Cardano.Ledger.Alonzo.TxWits
+    ( Redeemers (..)
+    , TxDats (..)
+    )
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Tx
     ( addrTxWitsL
@@ -23,6 +35,11 @@ import Cardano.Ledger.Api.Tx
     , reqSignerHashesTxBodyL
     )
 import Cardano.Ledger.Api.Tx.Body (mkBasicTxBody, vldtTxBodyL)
+import Cardano.Ledger.Api.Tx.Wits
+    ( datsTxWitsL
+    , rdmrsTxWitsL
+    , scriptTxWitsL
+    )
 import Cardano.Ledger.BaseTypes
     ( StrictMaybe (SJust, SNothing)
     , TxIx (..)
@@ -34,9 +51,10 @@ import Cardano.Ledger.Binary
     , serialize'
     )
 import Cardano.Ledger.Conway (ConwayEra)
-import Cardano.Ledger.Core (witsTxL)
+import Cardano.Ledger.Core (Script, hashScript, witsTxL)
 import Cardano.Ledger.Hashes
-    ( extractHash
+    ( ScriptHash
+    , extractHash
     , hashAnnotated
     , unsafeMakeSafeHash
     )
@@ -68,6 +86,8 @@ import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Ledger (ConwayTx)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as Base16
+import Data.Map.Strict qualified as Map
+import Data.Maybe (fromJust)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Word (Word8)
@@ -128,6 +148,40 @@ spec =
             assembled ^. witsTxL . addrTxWitsL
                 `shouldBe` Set.singleton witness
 
+        it
+            "preserves a pre-existing non-roster vkey witness while adding collected witnesses"
+            $ do
+                let tx = scriptBearingTx
+                    existingWitness = testWitness 9 tx
+                    firstWitness = testWitness 1 tx
+                    secondWitness = testWitness 2 tx
+                    entry =
+                        (testEntry [1, 2] (Set.fromList [firstWitness, secondWitness]))
+                            { entryId = entryIdFromTx tx
+                            , entryTx =
+                                tx
+                                    & witsTxL . addrTxWitsL
+                                        .~ Set.singleton existingWitness
+                            }
+                    original = entryTx entry
+                    assembled = assembleEntryTx entry
+                hashAnnotated (assembled ^. bodyTxL)
+                    `shouldBe` hashAnnotated (original ^. bodyTxL)
+                assembled ^. bodyTxL . scriptIntegrityHashTxBodyL
+                    `shouldBe` original ^. bodyTxL . scriptIntegrityHashTxBodyL
+                assembled ^. witsTxL . addrTxWitsL
+                    `shouldBe` Set.fromList
+                        [ existingWitness
+                        , firstWitness
+                        , secondWitness
+                        ]
+                assembled ^. witsTxL . scriptTxWitsL
+                    `shouldBe` original ^. witsTxL . scriptTxWitsL
+                assembled ^. witsTxL . rdmrsTxWitsL
+                    `shouldBe` original ^. witsTxL . rdmrsTxWitsL
+                assembled ^. witsTxL . datsTxWitsL
+                    `shouldBe` original ^. witsTxL . datsTxWitsL
+
 testEntry :: [Word] -> Set (WitVKey Witness) -> Entry
 testEntry required collected =
     Entry
@@ -149,6 +203,18 @@ otherTx =
     txWithSigners [1]
         & bodyTxL . vldtTxBodyL
             .~ ValidityInterval SNothing (SJust (SlotNo 121))
+
+scriptBearingTx :: ConwayTx
+scriptBearingTx =
+    txWithSigners [1, 2]
+        & bodyTxL . scriptIntegrityHashTxBodyL
+            .~ SJust testScriptIntegrityHash
+        & witsTxL . scriptTxWitsL
+            .~ Map.singleton testScriptHash testScript
+        & witsTxL . rdmrsTxWitsL
+            .~ Redeemers mempty
+        & witsTxL . datsTxWitsL
+            .~ TxDats mempty
 
 txWithSigners :: [Word] -> ConwayTx
 txWithSigners signers =
@@ -206,3 +272,20 @@ mkHash32 n =
     case hashFromBytes (BS.pack (replicate 31 0 ++ [n])) of
         Just h -> h
         Nothing -> error "mkHash32: invalid hash length"
+
+testScript :: Script ConwayEra
+testScript =
+    NativeScript (mkRequireSignatureTimelock (asWitness (signerHash 7)))
+
+testScriptHash :: ScriptHash
+testScriptHash =
+    hashScript testScript
+
+testScriptIntegrityHash :: ScriptIntegrityHash
+testScriptIntegrityHash =
+    unsafeMakeSafeHash
+        ( fromJust
+            ( hashFromStringAsHex
+                "1111111111111111111111111111111111111111111111111111111111111111"
+            )
+        )

@@ -138,6 +138,7 @@ test-suite unit-tests
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-allegra
+    , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-binary
     , cardano-ledger-conway
@@ -147,6 +148,7 @@ test-suite unit-tests
     , cardano-multisig
     , cardano-node-clients
     , cardano-slotting
+    , cardano-tx-tools
     , cardano-tx-tools:tx-build
     , chain-follower
     , containers

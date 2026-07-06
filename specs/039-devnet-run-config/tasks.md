@@ -12,11 +12,11 @@
 
 ## Slice 2: Partial-Witness Regression Tests
 
-- [ ] T004 Add RED/GREEN unit coverage proving `assembleEntryTx` preserves a
+- [X] T004 Add RED/GREEN unit coverage proving `assembleEntryTx` preserves a
   pre-existing non-roster vkey witness while adding collected roster
   witnesses.
-- [ ] T005 Assert assembly leaves the body hash, script data hash, and
+- [X] T005 Assert assembly leaves the body hash, script data hash, and
   non-vkey witness components unchanged for the script-bearing fixture.
-- [ ] T006 Add the feasible no-live-node `collectInputs` boundary check for
+- [X] T006 Add the feasible no-live-node `collectInputs` boundary check for
   spend/reference/collateral inputs, or record a precise infeasibility
   rationale in `WIP.md`.
