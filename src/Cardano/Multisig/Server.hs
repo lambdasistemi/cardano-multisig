@@ -70,12 +70,15 @@ import Cardano.Multisig.Publish
     , PublishFailure (..)
     , PublishRequest (..)
     , publishEntry
+    , publishRequiredConfirmationDepth
     , quoteTx
     )
 import Cardano.Multisig.Store
     ( Entry (..)
     , EntryId (..)
     , EntryStatus (..)
+    , FeeAllowance (..)
+    , MalformedFeePayment
     , Receipt (..)
     , Store (..)
     )
@@ -117,6 +120,7 @@ import Data.Aeson
     )
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 qualified as Base16
+import Data.Maybe (isJust)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -256,6 +260,8 @@ applicationWith network schedule deps request respond =
             quoteHandler schedule (sdPublish deps) request respond
         ("POST", ["v1", "entries"]) ->
             entriesHandler schedule (sdPublish deps) request respond
+        ("GET", ["v1", "fee-status", rawEntryId]) ->
+            feeStatusHandler schedule (sdPublish deps) rawEntryId request respond
         ("GET", ["v1", "entries"]) ->
             listEntriesHandler (sdPublish deps) request respond
         ("GET", ["v1", "entries", rawEntryId]) ->
@@ -320,6 +326,38 @@ entriesHandler schedule deps request respond = do
                             publishFailureResponse err
                         Right entry ->
                             jsonResponse status201 (entryJson pbTransaction entry)
+
+feeStatusHandler
+    :: OperatorSchedule
+    -> PublishDeps IO
+    -> Text
+    -> Application
+feeStatusHandler schedule deps rawEntryId request respond =
+    case parseEntryId rawEntryId of
+        Left _ ->
+            respond entryNotFound
+        Right entryId ->
+            case traverse parseTxIn paymentHint of
+                Left err ->
+                    respond $ failureResponse status422 "invalid_fee_payment" err
+                Right payment -> do
+                    tip <- pdReadTip deps
+                    allowance <-
+                        storeAllowanceFor
+                            store
+                            entryId
+                            tip
+                            publishRequiredConfirmationDepth
+                    malformed <- case payment of
+                        Nothing -> pure Nothing
+                        Just txIn -> storeMalformedFeePayment store txIn
+                    let required = feeStatusSurfaceRequiredLovelace schedule tip
+                    respond
+                        $ jsonResponse status200
+                        $ feeStatusJson required allowance malformed
+  where
+    store = pdStore deps
+    paymentHint = optionalQueryParam "payment" (queryString request)
 
 newtype FeeQuoteBody = FeeQuoteBody
     { fqTransaction :: Text
@@ -811,6 +849,45 @@ feeFailureDetails status =
             [ "paid_lovelace" .= feeStatusPaidLovelace status
             , "required_lovelace" .= feeStatusRequiredLovelace status
             ]
+
+feeStatusJson
+    :: Integer
+    -> FeeAllowance
+    -> Maybe MalformedFeePayment
+    -> Value
+feeStatusJson required allowance malformed =
+    object
+        [ "observed" .= observed
+        , "confirmed" .= confirmed
+        , "sufficient" .= sufficient
+        , "ready_to_publish" .= sufficient
+        , "paid_lovelace" .= paid
+        , "required_lovelace" .= required
+        , "confirmations" .= allowanceRequiredDepth allowance
+        , "reason" .= (feeReasonCode <$> reason)
+        ]
+  where
+    paid = allowanceLovelace allowance
+    confirmed = paid > 0
+    sufficient = fromIntegral paid >= required
+    observed = confirmed || allowanceHasUnconfirmed allowance || isJust malformed
+    reason
+        | sufficient = Nothing
+        | isJust malformed = Just FeeMetadataMalformed
+        | allowanceHasUnconfirmed allowance = Just FeeUnconfirmed
+        | paid > 0 = Just FeeInsufficient
+        | otherwise = Just FeeNotSeen
+
+feeStatusSurfaceRequiredLovelace
+    :: OperatorSchedule -> SlotNo -> Integer
+feeStatusSurfaceRequiredLovelace schedule (SlotNo tip) =
+    osBaseLovelace schedule
+        + osRateLovelacePerSlot schedule
+            * max
+                0
+                ( fromIntegral (tip + osTtlHorizonSlots schedule)
+                    - fromIntegral tip
+                )
 
 notImplemented :: Value
 notImplemented =

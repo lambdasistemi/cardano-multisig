@@ -473,6 +473,120 @@ spec = do
                         )
                 simpleStatus preflight `shouldBe` status422
 
+    describe "Cardano.Multisig.Server fee-status HTTP routes" $ do
+        it "returns ready status when final allowance is sufficient" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+            body <-
+                getJson
+                    (feeStatusPath (entryIdFromTx tx))
+                    happyDeps{mdAllowance = FeeAllowance 1_500 5 False}
+            body
+                `shouldBe` feeStatusJson
+                    True
+                    True
+                    True
+                    True
+                    1_500
+                    1_500
+                    5
+                    Nothing
+
+        it "returns fee_not_seen when no payment was observed" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+            body <-
+                getJson
+                    (feeStatusPath (entryIdFromTx tx))
+                    happyDeps{mdAllowance = FeeAllowance 0 5 False}
+            body
+                `shouldBe` feeStatusJson
+                    False
+                    False
+                    False
+                    False
+                    0
+                    1_500
+                    5
+                    (Just "fee_not_seen")
+
+        it "returns fee_unconfirmed when allowance is not final" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+            body <-
+                getJson
+                    (feeStatusPath (entryIdFromTx tx))
+                    happyDeps{mdAllowance = FeeAllowance 0 5 True}
+            body
+                `shouldBe` feeStatusJson
+                    True
+                    False
+                    False
+                    False
+                    0
+                    1_500
+                    5
+                    (Just "fee_unconfirmed")
+
+        it "returns fee_insufficient when final allowance is short" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+            body <-
+                getJson
+                    (feeStatusPath (entryIdFromTx tx))
+                    happyDeps{mdAllowance = FeeAllowance 1_499 5 False}
+            body
+                `shouldBe` feeStatusJson
+                    True
+                    True
+                    False
+                    False
+                    1_499
+                    1_500
+                    5
+                    (Just "fee_insufficient")
+
+        it "returns fee_metadata_malformed for a malformed payment hint" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                feePayment = mkTxIn 9
+                malformed =
+                    MalformedFeePayment
+                        { malformedFeePaymentTxIn = feePayment
+                        , malformedFeePaymentBlockSlot = SlotNo 99
+                        }
+            body <-
+                getJson
+                    ( feeStatusPath (entryIdFromTx tx)
+                        <> "?payment="
+                        <> TextEncoding.encodeUtf8 (renderTxIn feePayment)
+                    )
+                    happyDeps
+                        { mdAllowance = FeeAllowance 0 5 False
+                        , mdMalformed = Just malformed
+                        }
+            body
+                `shouldBe` feeStatusJson
+                    True
+                    False
+                    False
+                    False
+                    0
+                    1_500
+                    5
+                    (Just "fee_metadata_malformed")
+
+        it "rejects an invalid payment query" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+            response <-
+                waiRequest
+                    methodGet
+                    (feeStatusPath (entryIdFromTx tx) <> "?payment=not-a-txin")
+                    happyDeps
+                    mempty
+            simpleStatus response `shouldBe` status422
+            decode (simpleBody response)
+                `shouldBe` Just
+                    ( errorEnvelope
+                        "invalid_fee_payment"
+                        "expected <txid>#<ix>"
+                    )
+
     describe "Cardano.Multisig.Server witness HTTP routes" $ do
         it
             "returns a stored entry with collected witnesses and missing signers"
@@ -1181,6 +1295,10 @@ entryPath :: EntryId -> ByteString
 entryPath entryId =
     TextEncoding.encodeUtf8 ("/v1/entries/" <> renderEntryId entryId)
 
+feeStatusPath :: EntryId -> ByteString
+feeStatusPath entryId =
+    TextEncoding.encodeUtf8 ("/v1/fee-status/" <> renderEntryId entryId)
+
 witnessPath :: EntryId -> ByteString
 witnessPath entryId =
     entryPath entryId <> "/witnesses"
@@ -1231,6 +1349,28 @@ entrySummaryJson entry@Entry{..} =
         , "missing" .= renderKeyHashes (entryMissingSigners entry)
         , "invalid_hereafter" .= renderSlot entryInvalidHereafter
         , "status" .= renderEntryStatus (entryWitnessStatus entry)
+        ]
+
+feeStatusJson
+    :: Bool
+    -> Bool
+    -> Bool
+    -> Bool
+    -> Word64
+    -> Integer
+    -> Word
+    -> Maybe Text
+    -> Value
+feeStatusJson observed confirmed sufficient ready paid required confirmations reason =
+    object
+        [ "observed" .= observed
+        , "confirmed" .= confirmed
+        , "sufficient" .= sufficient
+        , "ready_to_publish" .= ready
+        , "paid_lovelace" .= paid
+        , "required_lovelace" .= required
+        , "confirmations" .= confirmations
+        , "reason" .= reason
         ]
 
 policyBody :: FilterPolicy -> WitVKey Witness -> Value

@@ -11,6 +11,7 @@ module Cardano.Multisig.Publish
     , PublishFailure (..)
     , PublishRequest (..)
     , publishEntry
+    , publishRequiredConfirmationDepth
     , quoteTx
     )
 where
