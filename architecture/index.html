@@ -8,29 +8,31 @@
       
       
       
-        <link rel="canonical" href="https://lambdasistemi.github.io/cardano-multisig/">
+        <link rel="canonical" href="https://lambdasistemi.github.io/cardano-multisig/architecture/">
       
       
+        <link rel="prev" href="../devnet-run/">
       
-        <link rel="next" href="devnet-run/">
+      
+        <link rel="next" href="trust-model/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
     
     
       
-        <title>cardano-multisig</title>
+        <title>Architecture - cardano-multisig</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,7 +51,7 @@
       
     
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -72,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#cardano-multisig" class="md-skip">
+        <a href="#architecture" class="md-skip">
           Skip to content
         </a>
       
@@ -88,7 +90,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="cardano-multisig" class="md-header__button md-logo" aria-label="cardano-multisig" data-md-component="logo">
+    <a href=".." title="cardano-multisig" class="md-header__button md-logo" aria-label="cardano-multisig" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -108,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Architecture
             
           </span>
         </div>
@@ -198,7 +200,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="cardano-multisig" class="md-nav__button md-logo" aria-label="cardano-multisig" data-md-component="logo">
+    <a href=".." title="cardano-multisig" class="md-nav__button md-logo" aria-label="cardano-multisig" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -225,37 +227,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -271,59 +246,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Design
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#key-properties" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Key properties
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#run-it" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Run it
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -335,7 +257,7 @@
   
   
     <li class="md-nav__item">
-      <a href="devnet-run/" class="md-nav__link">
+      <a href="../devnet-run/" class="md-nav__link">
         
   
   
@@ -359,6 +281,8 @@
       
   
   
+    
+  
   
   
     
@@ -382,15 +306,15 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="architecture/" class="md-nav__link ">
+            <a href="./" class="md-nav__link md-nav__link--active">
               
   
   
@@ -408,13 +332,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+              <label class="md-nav__link md-nav__link--active" for="__nav_3" id="__nav_3_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -434,7 +358,7 @@
   
   
     <li class="md-nav__item">
-      <a href="architecture/trust-model/" class="md-nav__link">
+      <a href="trust-model/" class="md-nav__link">
         
   
   
@@ -462,7 +386,7 @@
   
   
     <li class="md-nav__item">
-      <a href="architecture/fees/" class="md-nav__link">
+      <a href="fees/" class="md-nav__link">
         
   
   
@@ -490,7 +414,7 @@
   
   
     <li class="md-nav__item">
-      <a href="architecture/fee-discovery/" class="md-nav__link">
+      <a href="fee-discovery/" class="md-nav__link">
         
   
   
@@ -518,7 +442,7 @@
   
   
     <li class="md-nav__item">
-      <a href="architecture/lifecycle/" class="md-nav__link">
+      <a href="lifecycle/" class="md-nav__link">
         
   
   
@@ -546,7 +470,7 @@
   
   
     <li class="md-nav__item">
-      <a href="architecture/components/" class="md-nav__link">
+      <a href="components/" class="md-nav__link">
         
   
   
@@ -581,7 +505,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api-v1/" class="md-nav__link">
+      <a href="../api-v1/" class="md-nav__link">
         
   
   
@@ -628,10 +552,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#design" class="md-nav__link">
+  <a href="#one-sentence" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Design
+        One sentence
       
     </span>
   </a>
@@ -639,10 +563,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#key-properties" class="md-nav__link">
+  <a href="#the-mental-model-that-matters" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Key properties
+        The mental model that matters
       
     </span>
   </a>
@@ -650,10 +574,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#run-it" class="md-nav__link">
+  <a href="#the-eight-load-bearing-decisions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Run it
+        The eight load-bearing decisions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-push-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to push back
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#read-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read next
       
     </span>
   </a>
@@ -678,6 +624,46 @@
   
 
 
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href=".." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="./" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
               
               <article class="md-content__inner md-typeset">
                 
@@ -688,43 +674,128 @@
   
 
 
-<h1 id="cardano-multisig">cardano-multisig</h1>
-<p>A permissionless, stateful <strong>backend service</strong> that coordinates the
-collection of witnesses over Conway transactions until they are fully
-signed and ready to submit.</p>
-<p>Publish an unsigned transaction, collect witnesses from its required
-signers, watch it against the live chain, submit when complete. No
-accounts, no membership — a valid signature is the only credential.</p>
-<h2 id="design">Design</h2>
+<h1 id="architecture">Architecture</h1>
+<p>This section explains <strong>what <code>cardano-multisig</code> is, why it is shaped the way
+it is, and where the design is deliberately load-bearing</strong> — so you can
+understand it and push back before Milestone 1 is released.</p>
+<p>The <a href="https://github.com/lambdasistemi/cardano-multisig/blob/main/.specify/memory/constitution.md">constitution</a>
+is the governing document; these pages are the reasoned walkthrough of it,
+kept honest about the decisions that are <em>closed on purpose</em> and the ones
+still worth challenging.</p>
+<h2 id="one-sentence">One sentence</h2>
+<p>A <strong>permissionless, keyless, zero-on-chain-code backend</strong> that collects
+witnesses over a Conway transaction until it is fully signed, then submits
+it — charging a small non-refundable on-chain fee per request so a public
+instance cannot be spammed.</p>
+<h2 id="the-mental-model-that-matters">The mental model that matters</h2>
+<p>It is <strong>not a smart contract</strong>, and it is <strong>not a custodian</strong>. It is a
+<strong>coordinator</strong>: it hosts an <em>unsigned</em> transaction and the <em>witnesses</em>
+gathered for it, and it relays. It never holds funds, never holds a key over
+user funds, and runs <strong>no on-chain validator</strong> at all.</p>
+<p>Everything else follows from taking that seriously:</p>
+<pre class="mermaid"><code>flowchart LR
+    P[Proposer] -- "unsigned tx + paid fee" --&gt; S{{cardano-multisig}}
+    S -- "reads fee payment" --&gt; N[(cardano-node)]
+    G[Required signers] -- "witnesses (Ed25519)" --&gt; S
+    S -- "assembles + submits when complete" --&gt; N
+    S -. "holds only: unsigned tx + witnesses" .-&gt; DB[(durable store)]
+    style S fill:#1f6feb,color:#fff</code></pre>
 <ul>
-<li><strong><a href="architecture/">Architecture</a></strong> — the reasoned walkthrough of
-  the design: the trust model, the fee mechanics, how the service discovers
-  a payment, the request lifecycle, and the load-bearing decisions worth
-  pushing back on.</li>
-<li><strong>Governing document:</strong> the
-  <a href="https://github.com/lambdasistemi/cardano-multisig/blob/main/.specify/memory/constitution.md">constitution</a>
-  fixes what the service is and must never become.</li>
-<li><strong><a href="api-v1/">API (/v1)</a></strong> — the wire contract: who pays or signs at
-  each step, backed by the checked-in
-  <a href="https://github.com/lambdasistemi/cardano-multisig/blob/main/openapi/v1.yaml">OpenAPI 3.1 document</a>.</li>
-<li><strong><a href="devnet-run/">Devnet runbook</a></strong> — the operator environment for running
-  the server against a local devnet node.</li>
+<li>The proposer <strong>need not be a signer</strong> — a valid proposal is one that is
+  <em>paid for</em>, not one that is <em>enrolled</em>. A malicious proposal is harmless:
+  no honest signer signs a transaction they have not verified, and no party
+  can forge a witness.</li>
+<li>The service's job is <strong>verify and relay</strong>. It checks signatures, assembles
+  the fully-witnessed transaction, and broadcasts it. It never signs.</li>
+<li>A vanished operator costs at most <strong>re-collection</strong> of a request — never
+  funds, never authority — because witnesses are re-signable and the
+  unsigned transaction is re-publishable.</li>
 </ul>
-<h2 id="key-properties">Key properties</h2>
+<h2 id="the-eight-load-bearing-decisions">The eight load-bearing decisions</h2>
+<p>Each links to where it lives in these pages. The ones marked ⚠ are the
+places to aim your pushback first — they are closed <em>on purpose</em> and each
+closes off an alternative you might otherwise want.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Decision</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>No accounts</strong> — authorization is a fact checked per request, never an identity stored</td>
+<td><a href="trust-model/">Trust model</a></td>
+</tr>
+<tr>
+<td>2</td>
+<td>⚠ <strong>Zero on-chain validators</strong> — no Plutus, no minting policy, nothing to deploy or audit</td>
+<td><a href="trust-model/">Trust model</a></td>
+</tr>
+<tr>
+<td>3</td>
+<td>⚠ <strong>Non-refundable fee</strong> — prices the <em>reservation</em>, not the usage; a refund would reintroduce a validator</td>
+<td><a href="fees/">Fees</a></td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>Validity-weighted fee</strong> — <code>base + rate·(invalidHereafter − tip)</code> prices the real cost driver (monitoring)</td>
+<td><a href="fees/">Fees</a></td>
+</tr>
+<tr>
+<td>5</td>
+<td>⚠ <strong>Metadata-tagged payment + a fee indexer</strong> — how the service <em>discovers</em> your payment</td>
+<td><a href="fee-discovery/">Fee discovery</a></td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>Default-deny filter</strong> is the sole inbox defence; publication is open</td>
+<td><a href="lifecycle/">Lifecycle</a></td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>Gated entry, self-cleaning queue</strong> — phase-1 + bounded TTL at admission; auto-expiry, no delete endpoint</td>
+<td><a href="lifecycle/">Lifecycle</a></td>
+</tr>
+<tr>
+<td>8</td>
+<td>⚠ <strong>No off-operator durability</strong> — durable to <em>restart</em>, not to an operator vanishing; recover by re-collection + multi-homing</td>
+<td><a href="trust-model/">Trust model</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="where-to-push-back">Where to push back</h2>
+<p>If you only challenge a few things before M1, challenge these — they are the
+hinges the rest hangs on:</p>
+<ol>
+<li><strong>Non-refundability (#3).</strong> You pay to <em>try</em>, not to <em>succeed</em>; early
+   resolution forfeits the remainder. This is what keeps the chain
+   validator-free. Is "pay-per-attempt" acceptable UX, or does the lack of a
+   refund need a mitigation? See <a href="fees/#non-refundability">Fees</a>.</li>
+<li><strong>Metadata + indexer over a light-client proof (#5).</strong> M1 runs a
+   chain-follower to discover payments. The lighter, more marketable
+   alternative (client-supplied proofs, Subbit channels) is deferred to
+   <a href="https://github.com/lambdasistemi/cardano-multisig/issues/27">M2</a> — is
+   deferring it right? See <a href="fee-discovery/#alternatives-considered">Fee discovery</a>.</li>
+<li><strong>No off-operator durability (#8).</strong> If an operator disappears mid-ceremony
+   you re-collect. Is re-collection + multi-homing genuinely enough for your
+   use case, or is there a slow signing ceremony where it is not? See
+   <a href="trust-model/#no-off-operator-durability">Trust model</a>.</li>
+</ol>
+<h2 id="read-next">Read next</h2>
 <ul>
-<li><strong>Permissionless.</strong> Publishing is a paid, identity-free act; a valid
-  witness is the only credential to sign.</li>
-<li><strong>No on-chain code.</strong> The anti-spam fee is a bare, validity-weighted
-  on-chain payment the service <em>reads</em> — never a contract it calls.</li>
-<li><strong>Keyless.</strong> The service verifies, assembles, and submits; it never
-  holds a signing key over user funds.</li>
-<li><strong>Federated.</strong> Any operator can run the service; clients treat
-  operators as interchangeable and may multi-home.</li>
+<li><strong><a href="trust-model/">Trust model</a></strong> — authorization, the zero-validator
+  boundary, no custody, and the threat model.</li>
+<li><strong><a href="fees/">Fees &amp; the economic model</a></strong> — why the fee is shaped the way it
+  is, and the operator market.</li>
+<li><strong><a href="fee-discovery/">Fee discovery</a></strong> — how the service sees your payment:
+  the metadata tag, the indexer, the allowance, and the <code>fee-status</code> query.</li>
+<li><strong><a href="lifecycle/">Request lifecycle</a></strong> — quote → pay → publish → witness →
+  submit, gate by gate.</li>
+<li><strong><a href="components/">Components</a></strong> — the module map and how the pieces compose.</li>
 </ul>
-<h2 id="run-it">Run it</h2>
-<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>CD/docker-compose.yaml<span class="w"> </span>up
-</code></pre></div>
-<p>For a live devnet node, use the <a href="devnet-run/">devnet runbook</a>.</p>
 
 
 
@@ -774,10 +845,10 @@ accounts, no membership — a valid signature is the only credential.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.indexes", "content.code.copy", "navigation.path"], "search": "assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "content.code.copy", "navigation.path"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
       
     
   </body>

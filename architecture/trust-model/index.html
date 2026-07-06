@@ -1,0 +1,1013 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://lambdasistemi.github.io/cardano-multisig/architecture/trust-model/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../fees/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Trust model - cardano-multisig</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#trust-model" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="cardano-multisig" class="md-header__button md-logo" aria-label="cardano-multisig" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            cardano-multisig
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Trust model
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/lambdasistemi/cardano-multisig" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="cardano-multisig" class="md-nav__button md-logo" aria-label="cardano-multisig" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    cardano-multisig
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/lambdasistemi/cardano-multisig" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../devnet-run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Devnet runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trust model
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trust model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#authorization-a-fact-not-an-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authorization: a fact, not an identity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#zero-on-chain-validators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Zero on-chain validators ⚠
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-custody-keyless" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No custody, keyless ⚠
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-an-attacker-can-and-cannot-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What an attacker can and cannot do
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-off-operator-durability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No off-operator durability ⚠
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compliance-gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compliance gates
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fees/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fees & economics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fee-discovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fee discovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lifecycle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Request lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-v1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API (/v1)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#authorization-a-fact-not-an-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authorization: a fact, not an identity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#zero-on-chain-validators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Zero on-chain validators ⚠
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-custody-keyless" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No custody, keyless ⚠
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-an-attacker-can-and-cannot-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What an attacker can and cannot do
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-off-operator-durability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No off-operator durability ⚠
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compliance-gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compliance gates
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="trust-model">Trust model</h1>
+<p>This page is the security spine: <strong>who is trusted with what, what an attacker
+can and cannot do, and why the trust boundary is exhaustively the off-chain
+dependency tree.</strong></p>
+<h2 id="authorization-a-fact-not-an-identity">Authorization: a fact, not an identity</h2>
+<p>There is no session, cookie, account, login, or admin role. Every
+state-changing call <strong>carries its own proof in the request payload</strong>. The
+service verifies the proof and acts; it stores no credential.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Proof carried</th>
+<th>What the service checks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Publish</strong></td>
+<td>a confirmed, tagged on-chain <strong>fee payment</strong></td>
+<td>payment is on-chain, tagged with this body hash, covers the required amount, confirmed</td>
+</tr>
+<tr>
+<td><strong>Add witness</strong></td>
+<td>the <strong>witness itself</strong> (Ed25519 over the body hash)</td>
+<td>signature valid, key ∈ <code>required_signers</code>, not already present</td>
+</tr>
+<tr>
+<td><strong>Set filter policy</strong></td>
+<td>an <strong>Ed25519 signature</strong> by the signer's key</td>
+<td>signature verifies against the path key</td>
+</tr>
+<tr>
+<td><strong>Submit</strong></td>
+<td><strong>none</strong></td>
+<td>a fully-witnessed tx is broadcastable by anyone</td>
+</tr>
+<tr>
+<td><strong>All reads</strong></td>
+<td>none</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Because authorization travels in the body — never in cookies — CORS is
+<strong>credential-free</strong>: browser clients call the service cross-origin with no
+<code>Access-Control-Allow-Credentials</code>. There is no privileged unauthenticated
+bypass and no stored balance.</p>
+<div class="admonition note">
+<p class="admonition-title">Why this is safe without accounts</p>
+<p>Anyone who can reach the service can <strong>read</strong>. Changing an entry's fate
+requires <em>paying for it</em>, <em>signing it</em>, or <em>owning the policy key</em>. A
+toll creates no account, identity, or membership — it is pay-per-use and
+stateless.</p>
+</div>
+<h2 id="zero-on-chain-validators">Zero on-chain validators ⚠</h2>
+<p><strong>The service requires no Plutus script, no minting policy, no on-chain code
+to deploy or audit.</strong> Two facts make this possible:</p>
+<ul>
+<li>the <strong>fee</strong> is a bare payment tagged with the request body hash — the
+  service <em>reads</em> it, it never calls a contract;</li>
+<li>the <strong>roster</strong> is the ledger's native <code>required_signers</code> field (key 14),
+  not a script-derived set.</li>
+</ul>
+<p>This is a fund-adjacent service, so its trust boundary is deliberately made
+<em>exhaustively the off-chain dependency tree</em>, kept small (crypto reused from
+<a href="https://github.com/lambdasistemi/cardano-tx-tools"><code>cardano-tx-tools</code></a>, never
+reimplemented, never delegated to JavaScript).</p>
+<div class="admonition warning">
+<p class="admonition-title">This property is load-bearing and depends on non-refundability</p>
+<p>Any conditional refund, escrow, or proof-of-service obligation would
+reintroduce a validator and its audit surface. That is precisely why the
+fee is <a href="../fees/#non-refundability">non-refundable</a>. If you want to
+challenge non-refundability, you are challenging the zero-validator
+invariant — they stand or fall together.</p>
+</div>
+<h2 id="no-custody-keyless">No custody, keyless ⚠</h2>
+<p>The service <strong>verifies, assembles, and submits</strong> — it never holds a signing
+key over user funds and never signs on behalf of a signer. Witnesses are
+produced by clients offline against their own key material. Key custody is
+out of scope, permanently.</p>
+<p>The one key an operator <em>may</em> hold is the key to <strong>its own fee-collection
+address</strong> — its revenue. That key is <strong>not in the request path</strong> (the service
+only <em>reads</em> fee payments to admit a publish; sweeping them to a wallet is
+out-of-band housekeeping) and is never custody of user or coordinated funds.</p>
+<h2 id="what-an-attacker-can-and-cannot-do">What an attacker can and cannot do</h2>
+<table>
+<thead>
+<tr>
+<th>Actor</th>
+<th>Can</th>
+<th>Cannot</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Malicious proposer</strong></td>
+<td>publish any unsigned tx they pay for; put junk in the queue</td>
+<td>make anyone sign it; forge a witness; reach an honest signer's inbox before a <em>trusted</em> co-signer has signed (default-deny filter)</td>
+</tr>
+<tr>
+<td><strong>Third party</strong></td>
+<td>pay a fee tagged for someone else's request (merely <em>helps</em> it publish — publication is open anyway)</td>
+<td>steal or reuse another request's fee (the body-hash tag binds one payment to one request); publish for free</td>
+</tr>
+<tr>
+<td><strong>Spammer / DoS</strong></td>
+<td>flood the queue — <strong>at a per-entry, validity-weighted cost</strong></td>
+<td>exhaust resources for free; a flood must pay per entry over its whole TTL</td>
+</tr>
+<tr>
+<td><strong>Compromised signer key</strong></td>
+<td>publish; sign</td>
+<td>be un-noticed by co-signers whose filter is trust-ordered — a rogue signature does not propagate to signers who did not list that key</td>
+</tr>
+<tr>
+<td><strong>The operator</strong></td>
+<td>stall, drop, or censor a request; set its own price</td>
+<td>steal funds (holds none); forge authority (holds no user key); be un-routable-around (clients <a href="../fees/#operator-market">multi-home</a>)</td>
+</tr>
+</tbody>
+</table>
+<p>The recurring theme: <strong>the worst an adversary achieves is nuisance or
+censorship, never theft of funds or forgery of authority</strong> — because the
+service holds neither.</p>
+<h2 id="no-off-operator-durability">No off-operator durability ⚠</h2>
+<p>Durable state is scoped <strong>deliberately to restart, not to an operator's
+disappearance.</strong> The store (the pending-transaction wallet) MUST survive a
+process restart. It is <strong>not</strong> replicated off-operator or anchored on-chain.</p>
+<p>The justification: an in-flight request holds no custody. Its witnesses are
+re-signable and its unsigned transaction is re-publishable, so a vanished
+operator costs at most the <strong>re-collection</strong> of a request — never funds,
+never authority. For high-stakes requests, <strong>multi-homing</strong> (publishing to
+several operators at once) removes even that cost.</p>
+<div class="admonition warning">
+<p class="admonition-title">Closed decision — but the place to push back</p>
+<p>Durable off-operator request state would reintroduce the very on-chain /
+replicated footprint this design eliminates. It is revisited <strong>only</strong>
+given a concrete case where re-collection is genuinely expensive <em>and</em>
+multi-homing is unavailable — e.g. a slow air-gapped signing ceremony
+that cannot be run against parallel operators. If you have such a case,
+raise it before M1.</p>
+</div>
+<h2 id="compliance-gates">Compliance gates</h2>
+<p>Every PR is checked against these invariants (constitution, Governance):</p>
+<ul>
+<li><strong>Principle I</strong> — no account / no stored credential.</li>
+<li><strong>Principle IV</strong> — the core imports no consumer domain type (treasury
+  scopes, address labels, metadata anchors). A domain leak is rejected on
+  sight; it is also what keeps operators interchangeable.</li>
+<li><strong>Principle VI</strong> — no on-chain code. (For this epic specifically, an
+  additional gate: <code>grep</code> for <code>cardano-api</code> must be empty — the crypto path
+  is ledger-level, not the api umbrella.)</li>
+<li><strong>Non-refundability</strong> may not be reversed without acknowledging it
+  reintroduces on-chain validation.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.indexes", "content.code.copy", "navigation.path"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+    
+  </body>
+</html>

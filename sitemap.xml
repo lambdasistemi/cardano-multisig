@@ -8,4 +8,32 @@
          <loc>https://lambdasistemi.github.io/cardano-multisig/api-v1/</loc>
          <lastmod>1980-01-01</lastmod>
     </url>
+    <url>
+         <loc>https://lambdasistemi.github.io/cardano-multisig/devnet-run/</loc>
+         <lastmod>1980-01-01</lastmod>
+    </url>
+    <url>
+         <loc>https://lambdasistemi.github.io/cardano-multisig/architecture/</loc>
+         <lastmod>1980-01-01</lastmod>
+    </url>
+    <url>
+         <loc>https://lambdasistemi.github.io/cardano-multisig/architecture/components/</loc>
+         <lastmod>1980-01-01</lastmod>
+    </url>
+    <url>
+         <loc>https://lambdasistemi.github.io/cardano-multisig/architecture/fee-discovery/</loc>
+         <lastmod>1980-01-01</lastmod>
+    </url>
+    <url>
+         <loc>https://lambdasistemi.github.io/cardano-multisig/architecture/fees/</loc>
+         <lastmod>1980-01-01</lastmod>
+    </url>
+    <url>
+         <loc>https://lambdasistemi.github.io/cardano-multisig/architecture/lifecycle/</loc>
+         <lastmod>1980-01-01</lastmod>
+    </url>
+    <url>
+         <loc>https://lambdasistemi.github.io/cardano-multisig/architecture/trust-model/</loc>
+         <lastmod>1980-01-01</lastmod>
+    </url>
 </urlset>
