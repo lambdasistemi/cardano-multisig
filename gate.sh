@@ -20,3 +20,4 @@ fi
 
 nix build --quiet .#cardano-multisig .#unit-tests
 nix develop --quiet -c just ci
+nix run --quiet .#devnet-publish-smoke

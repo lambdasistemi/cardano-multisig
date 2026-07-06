@@ -81,6 +81,18 @@ jobs:
       - name: Run HLint
         run: nix --quiet develop -c just hlint
 
+  devnet-publish-smoke:
+    name: Devnet publish smoke
+    runs-on: nixos
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/cachix-action@v15
+        with:
+          name: paolino
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Run devnet publish smoke
+        run: nix --quiet run .#devnet-publish-smoke
+
   # Note: the `nixos` runners have no docker daemon, so the image is not
   # pushed from CI. The `Build` job publishes the nix-built image as a
   # downloadable artifact; deployment ships that image to the host
