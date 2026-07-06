@@ -12,6 +12,16 @@ import Cardano.Crypto.Hash (hashFromBytes, hashFromStringAsHex)
 import Cardano.Crypto.Hash.Class (Hash, HashAlgorithm)
 import Cardano.Ledger.Address (Addr (..))
 import Cardano.Ledger.Api.Scripts.Data (Datum (NoDatum))
+import Cardano.Ledger.Api.Tx
+    ( bodyTxL
+    , mkBasicTx
+    )
+import Cardano.Ledger.Api.Tx.Body
+    ( collateralInputsTxBodyL
+    , inputsTxBodyL
+    , mkBasicTxBody
+    , referenceInputsTxBodyL
+    )
 import Cardano.Ledger.Api.Tx.Out (TxOut, mkBasicTxOut)
 import Cardano.Ledger.BaseTypes (Network (..), TxIx (..))
 import Cardano.Ledger.Coin (Coin (..))
@@ -41,13 +51,17 @@ import Cardano.Node.Client.Provider
     , singleShotWithAcquired
     )
 import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Tx.Ledger (ConwayTx)
+import Cardano.Tx.Validate.Cli (collectInputs)
 import Control.Exception (ErrorCall (..), throwIO)
 import Data.ByteString qualified as BS
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Word (Word16, Word8)
+import Lens.Micro ((&), (.~))
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Environment (lookupEnv)
@@ -122,6 +136,27 @@ spec =
                                 { pceLedgerTipSlot = SlotNo 89
                                 , pceExactDepth = Nothing
                                 }
+
+        describe "collectInputs boundary"
+            $ it "includes spend, reference, and collateral inputs"
+            $ do
+                let spend = mkTxIn 11
+                    reference = mkTxIn 12
+                    collateral = mkTxIn 13
+                    tx =
+                        (mkBasicTx mkBasicTxBody :: ConwayTx)
+                            & bodyTxL . inputsTxBodyL
+                                .~ Set.singleton spend
+                            & bodyTxL . referenceInputsTxBodyL
+                                .~ Set.singleton reference
+                            & bodyTxL . collateralInputsTxBodyL
+                                .~ Set.singleton collateral
+                collectInputs tx
+                    `shouldBe` Set.fromList
+                        [ spend
+                        , reference
+                        , collateral
+                        ]
 
         describe "live N2C payment reader smoke"
             $ it "reads a known preprod TxIn from the live node when enabled"
