@@ -1,11 +1,10 @@
 # cardano-multisig — `/v1` HTTP API (design spec)
 
-**Status:** design. The formal OpenAPI 3.1 document — the wire contract of
-record (constitution, *Technology & Interface Constraints*) — is generated
-from and kept in sync with this design during Milestone 1. This document
-fixes the endpoint surface, the authorization model, and **who pays or signs
-at each step**. Every endpoint cites the constitutional principle it
-enforces.
+**Status:** design. The hand-authored OpenAPI 3.1 document — the wire
+contract of record (constitution, *Technology & Interface Constraints*) — is
+kept in sync with this design during Milestone 1. This document fixes the
+endpoint surface, the authorization model, and **who pays or signs at each
+step**. Every endpoint cites the constitutional principle it enforces.
 
 ## Roles
 
@@ -42,23 +41,28 @@ body, never in cookies.
 2. **Pay** *(off-chain Cardano payment — not an API call)* — the **proposer**
    sends the quoted lovelace to the fee address, **tagged with the body
    hash**, and waits for confirmation.
-3. **Publish** — `POST /v1/entries { transaction, fee_payment }`. The service
+3. **Poll fee status** — `GET /v1/fee-status/{id}` where `id` is the body
+   hash. The client waits until the operator reports the fee payment as
+   confirmed and sufficient.
+4. **Publish** — `POST /v1/entries { transaction }`. The client MAY also send
+   `fee_payment` as an explicit tx-in hint if it already knows the fee output.
+   The service
    re-derives the body hash, runs a live phase-1 pre-flight, checks the
    `invalidHereafter` is bounded within the horizon, and checks the tagged
    payment is confirmed and **covers `base + rate × (invalidHereafter −
    tip)`**. *Auth: fee.*
-4. **Find** — signers call `GET /v1/entries?signer=…&predicate=…` to surface
+5. **Find** — signers call `GET /v1/entries?signer=…&predicate=…` to surface
    what they are open to sign (default-deny filter, Principle III). *Read.*
-5. **Witness** — each signer `POST /v1/entries/{id}/witnesses { witness }`.
+6. **Witness** — each signer `POST /v1/entries/{id}/witnesses { witness }`.
    Verified against the body hash and the roster. *Auth: the witness.*
-6. **Watch** — anyone `GET /v1/entries/{id}` for progress, liveness, expiry.
-7. **Submit** — `POST /v1/entries/{id}/submit` once fully witnessed: assemble,
+7. **Watch** — anyone `GET /v1/entries/{id}` for progress, liveness, expiry.
+8. **Submit** — `POST /v1/entries/{id}/submit` once fully witnessed: assemble,
    broadcast, persist a receipt. *No auth.*
-8. **Receipt** — `GET /v1/entries/{id}/receipt`.
+9. **Receipt** — `GET /v1/entries/{id}/receipt`.
 
-**Multi-homing** (Operator market & federation): a client MAY run steps 1–3
+**Multi-homing** (Operator market & federation): a client MAY run steps 1–4
 against several operators in parallel; each charges its own fee. Witnesses in
-step 5 re-post to each. This is how a client survives a single operator
+step 6 re-post to each. This is how a client survives a single operator
 disappearing (Principle VII).
 
 ## Endpoints
@@ -72,7 +76,7 @@ Operator discovery + fee schedule (federation; Economic model).
     "base_lovelace": 1000000,
     "rate_lovelace_per_slot": 12,
     "address": "addr1...",
-    "tag_field": "body_hash_blake2b_256"
+    "tag_field": "metadata[9721].body_hash"
   },
   "ttl_horizon_slots": 864000,
   "roster_types": ["required_signers"]
@@ -96,16 +100,60 @@ the horizon.
 Convenience so the proposer pays the exact validity-weighted amount. *No
 auth.* Enforces: Economic model (validity-weighted fee).
 
+Fee payments carry the body hash in transaction metadata using no-schema JSON:
+label `9721`, a one-key map, key `body_hash`, and a value equal to the
+transaction body hash as 64 lowercase hex characters.
+
+```json
+{ "9721": { "body_hash": "<64 lowercase hex body hash>" } }
+```
+
+Current `cardano-cli` no-schema metadata flags:
+
+```bash
+BODY_HASH=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+cat > fee-metadata.json <<JSON
+{ "9721": { "body_hash": "${BODY_HASH}" } }
+JSON
+
+cardano-cli transaction build \
+  --tx-out "${FEE_ADDRESS}+${REQUIRED_FEE_LOVELACE}" \
+  --change-address "${CHANGE_ADDRESS}" \
+  --json-metadata-no-schema \
+  --metadata-json-file fee-metadata.json \
+  --out-file fee-payment.body
+```
+
+### `GET /v1/fee-status/{id}` — fee readiness
+`id` is the transaction body hash. The operator reads the chain for a payment
+to its fee address carrying `metadata[9721].body_hash = id`, then reports
+whether the payment is confirmed and sufficient.
+
+→ `200`:
+```json
+{
+  "body_hash": "<body_hash>",
+  "paid": false,
+  "reason": "fee_unconfirmed",
+  "fee_payment": "<txid#ix>"
+}
+```
+`reason ∈ fee_not_seen | fee_unconfirmed | fee_insufficient |
+fee_metadata_malformed`. Malformed label `9721` metadata is a fee-status
+payment failure, not a phase-1 transaction failure.
+
 ### `POST /v1/entries` — publish
-Body: `{ "transaction": "<unsigned tx CBOR hex>", "fee_payment": "<txid#ix>" }`
+Body: `{ "transaction": "<unsigned tx CBOR hex>" }`; optionally
+`{ "fee_payment": "<txid#ix>" }` when the client already has the exact fee
+payment output.
 Auth: **fee**. The service:
 1. decodes the tx and derives `body_hash`;
 2. runs a live phase-1 pre-flight — inputs resolve, validity interval
    contains the tip, value conserved (Principle V);
 3. requires a bounded `invalidHereafter` within the horizon (Principle V);
-4. verifies `fee_payment` is on-chain, pays the fee address, is tagged with
-   `body_hash`, is confirmed, and **covers `base + rate × (invalid_hereafter
-   − tip)`** (Economic model).
+4. verifies a matching fee payment is on-chain, pays the fee address, carries
+   `metadata[9721].body_hash`, is confirmed, and **covers `base + rate ×
+   (invalid_hereafter − tip)`** (Economic model).
 
 → `201`:
 ```json
@@ -117,8 +165,8 @@ Auth: **fee**. The service:
   "status": "collecting"
 }
 ```
-→ `402` fee missing / unconfirmed / insufficient · `422` phase-1 fail or TTL
-unbounded / over-horizon · `409` duplicate `entry_id`.
+→ `402` fee missing / unconfirmed / insufficient / malformed metadata · `422`
+phase-1 fail or TTL unbounded / over-horizon · `409` duplicate `entry_id`.
 Enforces: Principles I (fee-gated, proposer-open), V, VI, Economic model.
 
 ### `GET /v1/entries/{id}`

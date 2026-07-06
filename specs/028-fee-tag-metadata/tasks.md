@@ -14,15 +14,15 @@
 
 ## Slice 2 - OpenAPI and API Docs
 
-- [ ] T002-S2 Update `openapi/v1.yaml` with concrete fee address/tag-field
+- [X] T002-S2 Update `openapi/v1.yaml` with concrete fee address/tag-field
   semantics, `GET /fee-status/{id}`, `FeeStatus`, `FeeReason`, and optional
   `PublishRequest.fee_payment`.
-- [ ] T002-S2 Update `docs/api-v1.md` with the metadata JSON, current
+- [X] T002-S2 Update `docs/api-v1.md` with the metadata JSON, current
   `cardano-cli` no-schema example, and pay -> poll `fee-status` -> publish
   flow.
-- [ ] T002-S2 Run `nix develop --quiet -c just build-docs` and `./gate.sh`;
+- [X] T002-S2 Run `nix develop --quiet -c just build-docs` and `./gate.sh`;
   do not add `just update-swagger` or any new OpenAPI validator in this child.
-- [ ] T002-S2 Commit as `docs: pin fee metadata contract in API docs` with
+- [X] T002-S2 Commit as `docs: pin fee metadata contract in API docs` with
   trailer `Tasks: T002`.
 
 ## Slice 3 - Orchestrator-Owned Finalization

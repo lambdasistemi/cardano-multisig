@@ -58,8 +58,10 @@ paths:
       summary: Quote the exact validity-weighted fee for a transaction.
       description: |
         Convenience so the proposer pays the exact amount. Returns the fee
-        address and the required tag (the body hash). No auth. Enforces the
-        validity-weighted fee (Economic model).
+        address and the required metadata tag: label `9721`, key `body_hash`,
+        value equal to the transaction body hash as 64 lowercase hex
+        characters. No auth. Enforces the validity-weighted fee (Economic
+        model).
       requestBody:
         required: true
         content:
@@ -77,6 +79,29 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /fee-status/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Transaction body hash to check for a matching fee payment.
+        schema: { $ref: "#/components/schemas/BodyHash" }
+    get:
+      operationId: getFeeStatus
+      summary: Check fee-payment readiness for a body hash.
+      description: |
+        Reads the chain for a confirmed payment to the operator-published fee
+        address with metadata label `9721` containing
+        `{ "body_hash": "<64 lowercase hex body hash>" }`. Malformed fee
+        metadata is represented here as a payment failure reason, not as a
+        phase-1 transaction failure.
+      responses:
+        "200":
+          description: Fee-payment status for this body hash.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeeStatus" }
+
   /entries:
     post:
       operationId: publishEntry
@@ -86,8 +111,8 @@ paths:
         need not be a required-signer (Principle I). The service derives the
         body hash, runs a live phase-1 pre-flight (Principle V), requires a
         bounded `invalidHereafter` within the horizon (Principle V), and
-        verifies the `fee_payment` is on-chain, pays the fee address, is
-        tagged with the body hash, is confirmed, and covers
+        verifies a matching fee payment is on-chain, pays the fee address,
+        carries `metadata[9721].body_hash`, is confirmed, and covers
         `base + rate * (invalidHereafter - tip)` (Economic model).
       requestBody:
         required: true
@@ -101,7 +126,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Entry" }
         "402":
-          description: Fee missing, unconfirmed, or insufficient.
+          description: Fee missing, unconfirmed, insufficient, or carrying malformed fee metadata.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -343,10 +368,13 @@ components:
         rate_lovelace_per_slot:
           $ref: "#/components/schemas/Lovelace"
         address:
-          $ref: "#/components/schemas/Bech32Address"
+          allOf:
+            - $ref: "#/components/schemas/Bech32Address"
+          description: Operator-published fee collection address.
         tag_field:
           type: string
-          description: How the body hash is carried on the payment (e.g. a datum/metadata convention).
+          enum: ["metadata[9721].body_hash"]
+          description: The pinned metadata field carrying the body hash on the fee payment.
       description: "Fee = base_lovelace + rate_lovelace_per_slot * (invalidHereafter - tip)."
 
     OperatorInfo:
@@ -388,14 +416,39 @@ components:
         invalid_hereafter:
           $ref: "#/components/schemas/Slot"
 
+    FeeReason:
+      type: string
+      enum:
+        - fee_not_seen
+        - fee_unconfirmed
+        - fee_insufficient
+        - fee_metadata_malformed
+
+    FeeStatus:
+      type: object
+      required: [body_hash, paid]
+      properties:
+        body_hash:
+          $ref: "#/components/schemas/BodyHash"
+        paid:
+          type: boolean
+          description: True when a confirmed, sufficient payment with the pinned metadata tag has been seen.
+        reason:
+          $ref: "#/components/schemas/FeeReason"
+          description: Present when `paid` is false.
+        fee_payment:
+          $ref: "#/components/schemas/TxIn"
+          description: Matching fee-payment output, when one has been identified.
+
     PublishRequest:
       type: object
-      required: [transaction, fee_payment]
+      required: [transaction]
       properties:
         transaction:
           $ref: "#/components/schemas/CborHex"
         fee_payment:
           $ref: "#/components/schemas/TxIn"
+          description: Optional hint naming the fee-payment output if the client already knows it; otherwise the operator finds a matching tagged payment by body hash.
 
     Liveness:
       type: object
