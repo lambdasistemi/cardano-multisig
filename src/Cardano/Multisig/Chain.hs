@@ -5,10 +5,12 @@ module Cardano.Multisig.Chain
     , PaymentConfirmationEvidence (..)
     , PaymentReadResult (..)
     , Verdict
+    , chainSourceFromProvider
     , paymentConfirmationFromTxOut
     , readPaymentConfirmation
     , withNodeChainSource
     , withNodeProvider
+    , withNodeProviderAndSubmitter
     , networkFromMagic
     ) where
 
@@ -47,10 +49,12 @@ import Cardano.Node.Client.N2C.Connection
     , runNodeClient
     )
 import Cardano.Node.Client.N2C.Provider (mkN2CProvider)
+import Cardano.Node.Client.N2C.Submitter (mkN2CSubmitter)
 import Cardano.Node.Client.Provider
     ( LedgerSnapshot (..)
     , Provider (..)
     )
+import Cardano.Node.Client.Submitter (Submitter)
 import Cardano.Slotting.Slot (SlotNo)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
@@ -118,18 +122,31 @@ withNodeChainSource cfg k = do
     let magic = NetworkMagic (n2cMagic cfg)
         network = networkFromMagic magic
     withNodeProvider cfg $ \provider ->
-        k ChainSource{csPreflight = preflight network provider}
+        k (chainSourceFromProvider network provider)
+
+-- | Build a pre-flight source from an already-open provider.
+chainSourceFromProvider :: Network -> Provider IO -> ChainSource
+chainSourceFromProvider network provider =
+    ChainSource{csPreflight = preflight network provider}
 
 -- | Open a Node-to-Client session and run the action with its provider.
 withNodeProvider :: N2cConfig -> (Provider IO -> IO a) -> IO a
-withNodeProvider cfg k = do
+withNodeProvider cfg k =
+    withNodeProviderAndSubmitter cfg $ \provider _submitter -> k provider
+
+-- | Open one Node-to-Client session and expose both LocalStateQuery-backed
+-- reads and LocalTxSubmission-backed transaction submission.
+withNodeProviderAndSubmitter
+    :: N2cConfig -> (Provider IO -> Submitter IO -> IO a) -> IO a
+withNodeProviderAndSubmitter cfg k = do
     let magic = NetworkMagic (n2cMagic cfg)
     lsqCh <- newLSQChannel 64
     ltxsCh <- newLTxSChannel 64
     withAsync (void $ runNodeClient magic (n2cSocket cfg) lsqCh ltxsCh)
         $ \_ -> do
             let provider = mkN2CProvider lsqCh
-            k provider
+                submitter = mkN2CSubmitter ltxsCh
+            k provider submitter
 
 -- | Read a payment output through the same N2C provider/resolver path used
 -- for transaction pre-flight.

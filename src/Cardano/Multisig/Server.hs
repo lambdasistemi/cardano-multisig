@@ -5,6 +5,7 @@ module Cardano.Multisig.Server
     ( application
     , applicationWith
     , runServer
+    , ServerDeps (..)
     , operatorSchedule
     , errorEnvelope
     ) where
@@ -37,10 +38,10 @@ import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Multisig.Chain
     ( ChainSource (..)
     , N2cConfig (..)
+    , chainSourceFromProvider
     , networkFromMagic
     , readPaymentConfirmation
-    , withNodeChainSource
-    , withNodeProvider
+    , withNodeProviderAndSubmitter
     )
 import Cardano.Multisig.Publish
     ( FeeQuote (..)
@@ -56,11 +57,13 @@ import Cardano.Multisig.Store
     ( Entry (..)
     , EntryId (..)
     , EntryStatus (..)
+    , Receipt (..)
     , Store (..)
     )
 import Cardano.Multisig.Store.RocksDB (withRocksDBStore)
 import Cardano.Multisig.Witness
     ( WitnessFailure (..)
+    , assembleEntryTx
     , decodeVKeyWitnessHex
     , entryMissingSigners
     , entryWitnessStatus
@@ -71,6 +74,7 @@ import Cardano.Node.Client.Provider
     ( Provider (..)
     , ledgerTipSlot
     )
+import Cardano.Node.Client.Submitter qualified as NodeSubmitter
 import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Diff (decodeBech32Address)
 import Cardano.Tx.Ledger (ConwayTx)
@@ -96,6 +100,11 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
+import Data.Text.Encoding.Error (lenientDecode)
+import Data.Time.Clock
+    ( UTCTime
+    , getCurrentTime
+    )
 import Data.Word (Word32, Word64)
 import Network.HTTP.Types
     ( Status
@@ -198,10 +207,16 @@ legacyOperatorSchedule network =
         ]
 
 -- | Dependency-injected WAI application used by tests and by 'runServer'.
+data ServerDeps m = ServerDeps
+    { sdPublish :: PublishDeps m
+    , sdSubmitTx :: ConwayTx -> m (Either Text ())
+    , sdNow :: m UTCTime
+    }
+
 applicationWith
     :: String
     -> OperatorSchedule
-    -> PublishDeps IO
+    -> ServerDeps IO
     -> Application
 applicationWith network schedule deps request respond =
     case (requestMethod request, pathInfo request) of
@@ -212,13 +227,17 @@ applicationWith network schedule deps request respond =
         ("GET", ["health"]) ->
             respond $ jsonResponse status200 healthy
         ("POST", ["v1", "fee-quote"]) ->
-            quoteHandler schedule deps request respond
+            quoteHandler schedule (sdPublish deps) request respond
         ("POST", ["v1", "entries"]) ->
-            entriesHandler schedule deps request respond
+            entriesHandler schedule (sdPublish deps) request respond
         ("GET", ["v1", "entries", rawEntryId]) ->
-            readEntryHandler deps rawEntryId request respond
+            readEntryHandler (sdPublish deps) rawEntryId request respond
         ("POST", ["v1", "entries", rawEntryId, "witnesses"]) ->
-            witnessHandler deps rawEntryId request respond
+            witnessHandler (sdPublish deps) rawEntryId request respond
+        ("POST", ["v1", "entries", rawEntryId, "submit"]) ->
+            submitHandler deps rawEntryId request respond
+        ("GET", ["v1", "entries", rawEntryId, "receipt"]) ->
+            receiptHandler (sdPublish deps) rawEntryId request respond
         (_, "v1" : _) ->
             respond $ jsonResponse status501 notImplemented
         _ ->
@@ -340,6 +359,13 @@ witnessResultJson entry =
         , "status" .= renderEntryStatus (entryWitnessStatus entry)
         ]
 
+receiptJson :: Receipt -> Value
+receiptJson Receipt{..} =
+    object
+        [ "tx_id" .= renderEntryId receiptTxId
+        , "submitted_at" .= receiptSubmittedAt
+        ]
+
 txHexText :: ConwayTx -> Text
 txHexText =
     TextEncoding.decodeUtf8
@@ -391,6 +417,67 @@ witnessHandler deps rawEntryId request respond =
                                         $ jsonResponse
                                             status200
                                             (witnessResultJson updated)
+
+submitHandler
+    :: ServerDeps IO
+    -> Text
+    -> Application
+submitHandler deps rawEntryId _request respond =
+    case parseEntryId rawEntryId of
+        Left _ ->
+            respond entryNotFound
+        Right entryId -> do
+            found <- storeLookupEntry store entryId
+            case found of
+                Nothing ->
+                    respond entryNotFound
+                Just entry
+                    | entryWitnessStatus entry /= EntryReady ->
+                        respond
+                            $ failureResponse
+                                status409
+                                "not_ready"
+                                "entry is not ready to submit"
+                    | otherwise -> do
+                        let assembled = assembleEntryTx entry
+                        submitted <- sdSubmitTx deps assembled
+                        case submitted of
+                            Left reason ->
+                                respond
+                                    $ failureResponse
+                                        status422
+                                        "submit_rejected"
+                                        (Text.unpack reason)
+                            Right () -> do
+                                now <- sdNow deps
+                                let receipt =
+                                        Receipt
+                                            { receiptTxId = entryId
+                                            , receiptSubmittedAt = now
+                                            }
+                                    submittedEntry =
+                                        entry{entryStatus = EntrySubmitted}
+                                storePutReceipt store entryId receipt
+                                storePutEntry store submittedEntry
+                                respond $ jsonResponse status200 (receiptJson receipt)
+  where
+    store = pdStore (sdPublish deps)
+
+receiptHandler
+    :: PublishDeps IO
+    -> Text
+    -> Application
+receiptHandler deps rawEntryId _request respond =
+    case parseEntryId rawEntryId of
+        Left _ ->
+            respond entryNotFound
+        Right entryId -> do
+            found <- storeLookupReceipt (pdStore deps) entryId
+            respond $ case found of
+                Nothing ->
+                    entryNotFound
+                Just receipt ->
+                    jsonResponse status200 (receiptJson receipt)
 
 entryNotFound :: Response
 entryNotFound =
@@ -541,21 +628,27 @@ renderSlot (SlotNo slot) =
 runServer :: Port -> String -> IO ()
 runServer port network = do
     cfg <- readRuntimeConfig
-    withNodeProvider (rcN2c cfg) $ \provider ->
-        withNodeChainSource (rcN2c cfg) $ \chainSource ->
-            withRocksDBStore (rcStorePath cfg) $ \store -> do
-                let deps =
-                        PublishDeps
-                            { pdReadTip =
-                                ledgerTipSlot <$> queryLedgerSnapshot provider
-                            , pdReadPayment = readPaymentConfirmation provider
-                            , pdPreflight =
-                                preflightResult chainSource
-                            , pdStore = store
-                            }
-                run port
-                    $ cors (const $ Just policy)
-                    $ applicationWith network (rcSchedule cfg) deps
+    withNodeProviderAndSubmitter (rcN2c cfg) $ \provider submitter ->
+        withRocksDBStore (rcStorePath cfg) $ \store -> do
+            let chainSource = chainSourceFromProvider (osNetwork (rcSchedule cfg)) provider
+                publishDeps =
+                    PublishDeps
+                        { pdReadTip =
+                            ledgerTipSlot <$> queryLedgerSnapshot provider
+                        , pdReadPayment = readPaymentConfirmation provider
+                        , pdPreflight =
+                            preflightResult chainSource
+                        , pdStore = store
+                        }
+                deps =
+                    ServerDeps
+                        { sdPublish = publishDeps
+                        , sdSubmitTx = submitWith submitter
+                        , sdNow = getCurrentTime
+                        }
+            run port
+                $ cors (const $ Just policy)
+                $ applicationWith network (rcSchedule cfg) deps
   where
     policy =
         simpleCorsResourcePolicy
@@ -570,6 +663,15 @@ preflightResult chainSource tx = do
         StructurallyClean -> PreflightAccepted
         StructuralFailure -> PreflightRejected (renderHuman verdict)
         MempoolShortCircuit -> PreflightRejected (renderHuman verdict)
+
+submitWith
+    :: NodeSubmitter.Submitter IO -> ConwayTx -> IO (Either Text ())
+submitWith submitter tx = do
+    NodeSubmitter.submitTx submitter tx >>= \case
+        NodeSubmitter.Submitted _ ->
+            pure (Right ())
+        NodeSubmitter.Rejected reason ->
+            pure (Left (TextEncoding.decodeUtf8With lenientDecode reason))
 
 data RuntimeConfig = RuntimeConfig
     { rcN2c :: N2cConfig

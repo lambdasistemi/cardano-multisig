@@ -22,11 +22,11 @@
 
 ## Slice 3 - Submit And Receipt Routes
 
-- [ ] T014-S3 Extend runtime dependencies with injected submit support backed
+- [X] T014-S3 Extend runtime dependencies with injected submit support backed
   by the N2C LTxS path in production.
-- [ ] T014-S3 Wire `POST /v1/entries/{id}/submit` and
+- [X] T014-S3 Wire `POST /v1/entries/{id}/submit` and
   `GET /v1/entries/{id}/receipt`, including non-ready `409`, receipt
   persistence, and submitted status.
-- [ ] T014-S3 Add unit/HTTP tests with a stub submitter; keep live broadcast
+- [X] T014-S3 Add unit/HTTP tests with a stub submitter; keep live broadcast
   behind an opt-in smoke flag.
-- [ ] T014-S3 Run the focused submit/receipt tests and `./gate.sh`.
+- [X] T014-S3 Run the focused submit/receipt tests and `./gate.sh`.
