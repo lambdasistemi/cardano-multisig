@@ -35,10 +35,16 @@ import Cardano.Multisig.FeeIndexer
     ( FeeIndexResult (..)
     , FeeIndexerBlock (..)
     , FeeIndexerChainEvent (..)
+    , FeeIndexerConfig (..)
+    , FeeIndexerDeps (..)
     , FeeIndexerOutput (..)
     , FeeIndexerTx (..)
     , classifyFeeTx
+    , loadFeeIndexerCheckpoint
     , runFeeIndexerOnce
+    , runFeeIndexerSupervisorWith
+    , runFeeIndexerWith
+    , saveFeeIndexerCheckpoint
     )
 import Cardano.Multisig.FeeTag
     ( encodeFeeTag
@@ -52,7 +58,19 @@ import Cardano.Multisig.Store
     , MalformedFeePayment (..)
     , Store (..)
     )
+import Cardano.Node.Client.N2C.ChainSync
+    ( Fetched (..)
+    , HeaderPoint
+    )
 import Cardano.Slotting.Slot (SlotNo (..))
+import ChainFollower
+    ( Follower (..)
+    , Intersector (..)
+    )
+import Control.Exception
+    ( AsyncException (ThreadKilled)
+    , throwIO
+    )
 import Control.Monad.State.Strict
     ( State
     , execState
@@ -60,15 +78,32 @@ import Control.Monad.State.Strict
     , modify'
     )
 import Data.ByteString qualified as BS
+import Data.ByteString.Short qualified as SBS
+import Data.IORef
+    ( IORef
+    , modifyIORef'
+    , newIORef
+    , readIORef
+    , writeIORef
+    )
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Word (Word16, Word64, Word8)
+import Ouroboros.Consensus.HardFork.Combinator.AcrossEras
+    ( OneEraHash (..)
+    )
+import Ouroboros.Network.Block qualified as Network
+import Ouroboros.Network.Point qualified as Network.Point
+import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
     ( Spec
     , describe
     , it
     , shouldBe
+    , shouldReturn
+    , shouldThrow
     )
+import Unsafe.Coerce (unsafeCoerce)
 
 spec :: Spec
 spec =
@@ -134,6 +169,165 @@ spec =
             mockAttributedRollbacks finalState `shouldBe` [SlotNo 33]
             mockMalformedRollbacks finalState `shouldBe` [SlotNo 33]
 
+        it "cold start offers origin when no checkpoint exists"
+            $ withSystemTempDirectory "fee-indexer-cold"
+            $ \dir -> do
+                offeredRef <- newIORef []
+                stateRef <- newIORef emptyIOIndexerState
+                let runner _ _ _ _ points = do
+                        writeIORef offeredRef points
+                        pure (Right ())
+                runFeeIndexerWith
+                    runner
+                    emptyExtract
+                    (testConfig dir)
+                    (testDeps stateRef)
+                readIORef offeredRef
+                    `shouldReturn` [Network.Point Network.Point.Origin]
+
+        it "warm start offers the persisted checkpoint first"
+            $ withSystemTempDirectory "fee-indexer-warm"
+            $ \dir -> do
+                let checkpoint = headerPointAt 44
+                saveFeeIndexerCheckpoint dir checkpoint
+                offeredRef <- newIORef []
+                stateRef <- newIORef emptyIOIndexerState
+                let runner _ _ _ _ points = do
+                        writeIORef offeredRef points
+                        pure (Right ())
+                runFeeIndexerWith
+                    runner
+                    emptyExtract
+                    (testConfig dir)
+                    (testDeps stateRef)
+                readIORef offeredRef `shouldReturn` [checkpoint]
+
+        it "intersectFound rolls both row families back before following"
+            $ withSystemTempDirectory "fee-indexer-intersect"
+            $ \dir -> do
+                stateRef <- newIORef emptyIOIndexerState
+                let runner _ _ _ intersector _ = do
+                        _ <- intersectFound intersector (headerPointAt 12)
+                        pure (Right ())
+                runFeeIndexerWith
+                    runner
+                    emptyExtract
+                    (testConfig dir)
+                    (testDeps stateRef)
+                state <- readIORef stateRef
+                ioAttributedRollbacks state `shouldBe` [SlotNo 12]
+                ioMalformedRollbacks state `shouldBe` [SlotNo 12]
+
+        it
+            "roll-forward writes payments and malformed rows, checkpoints, and updates the tip"
+            $ withSystemTempDirectory "fee-indexer-forward"
+            $ \dir -> do
+                stateRef <- newIORef emptyIOIndexerState
+                let point = headerPointAt 20
+                    runner _ _ _ intersector _ = do
+                        follower <-
+                            intersectFound
+                                intersector
+                                (Network.Point Network.Point.Origin)
+                        _ <-
+                            rollForward
+                                follower
+                                (fetchedAt point 99)
+                                (Network.SlotNo 99)
+                        pure (Right ())
+                runFeeIndexerWith
+                    runner
+                    (const $ pure indexedBlock)
+                    (testConfig dir)
+                    (testDeps stateRef)
+                state <- readIORef stateRef
+                ioPayments state `shouldBe` [expectedPayment]
+                ioMalformed state
+                    `shouldBe` [ MalformedFeePayment
+                                    { malformedFeePaymentTxIn = feeTxIn
+                                    , malformedFeePaymentBlockSlot = SlotNo 20
+                                    }
+                               ]
+                ioObservedTips state `shouldBe` [SlotNo 99]
+                loadFeeIndexerCheckpoint dir `shouldReturn` Just point
+
+        it
+            "roll-backward rolls both rows back and persists a concrete checkpoint"
+            $ withSystemTempDirectory "fee-indexer-backward"
+            $ \dir -> do
+                stateRef <- newIORef emptyIOIndexerState
+                let point = headerPointAt 12
+                    runner _ _ _ intersector _ = do
+                        follower <-
+                            intersectFound
+                                intersector
+                                (Network.Point Network.Point.Origin)
+                        writeIORef stateRef emptyIOIndexerState
+                        _ <- rollBackward follower point
+                        pure (Right ())
+                runFeeIndexerWith
+                    runner
+                    emptyExtract
+                    (testConfig dir)
+                    (testDeps stateRef)
+                state <- readIORef stateRef
+                ioAttributedRollbacks state `shouldBe` [SlotNo 12]
+                ioMalformedRollbacks state `shouldBe` [SlotNo 12]
+                loadFeeIndexerCheckpoint dir `shouldReturn` Just point
+
+        it
+            "warm intersectNotFound clears both row families before retrying from origin"
+            $ withSystemTempDirectory "fee-indexer-reset"
+            $ \dir -> do
+                saveFeeIndexerCheckpoint dir (headerPointAt 88)
+                retryPointsRef <- newIORef []
+                stateRef <- newIORef emptyIOIndexerState
+                let runner _ _ _ intersector _ = do
+                        (_intersector', retryPoints) <-
+                            intersectNotFound intersector
+                        writeIORef retryPointsRef retryPoints
+                        pure (Right ())
+                runFeeIndexerWith
+                    runner
+                    emptyExtract
+                    (testConfig dir)
+                    (testDeps stateRef)
+                state <- readIORef stateRef
+                ioAttributedRollbacks state `shouldBe` [SlotNo 0]
+                ioMalformedRollbacks state `shouldBe` [SlotNo 0]
+                readIORef retryPointsRef
+                    `shouldReturn` [Network.Point Network.Point.Origin]
+
+        it "supervisor retries one synchronous transient failure"
+            $ withSystemTempDirectory "fee-indexer-retry"
+            $ \dir -> do
+                attemptsRef <- newIORef (0 :: Int)
+                stateRef <- newIORef emptyIOIndexerState
+                let runner _ _ _ _ _ = do
+                        modifyIORef' attemptsRef (+ 1)
+                        attempts <- readIORef attemptsRef
+                        if attempts == 1
+                            then throwIO (userError "transient")
+                            else pure (Right ())
+                runFeeIndexerSupervisorWith
+                    runner
+                    emptyExtract
+                    (testConfig dir)
+                    (testDeps stateRef)
+                readIORef attemptsRef `shouldReturn` 2
+
+        it "supervisor preserves async cancellation"
+            $ withSystemTempDirectory "fee-indexer-cancel"
+            $ \dir -> do
+                stateRef <- newIORef emptyIOIndexerState
+                let runner _ _ _ _ _ = throwIO ThreadKilled
+                runFeeIndexerSupervisorWith
+                    runner
+                    emptyExtract
+                    (testConfig dir)
+                    (testDeps stateRef)
+                    `shouldThrow` (== ThreadKilled)
+
 data MockState = MockState
     { mockPayments :: [FeePayment]
     , mockMalformed :: [MalformedFeePayment]
@@ -141,6 +335,119 @@ data MockState = MockState
     , mockMalformedRollbacks :: [SlotNo]
     }
     deriving stock (Eq, Show)
+
+data IOIndexerState = IOIndexerState
+    { ioPayments :: [FeePayment]
+    , ioMalformed :: [MalformedFeePayment]
+    , ioAttributedRollbacks :: [SlotNo]
+    , ioMalformedRollbacks :: [SlotNo]
+    , ioObservedTips :: [SlotNo]
+    }
+    deriving stock (Eq, Show)
+
+emptyIOIndexerState :: IOIndexerState
+emptyIOIndexerState =
+    IOIndexerState
+        { ioPayments = []
+        , ioMalformed = []
+        , ioAttributedRollbacks = []
+        , ioMalformedRollbacks = []
+        , ioObservedTips = []
+        }
+
+testDeps :: IORef IOIndexerState -> FeeIndexerDeps IO
+testDeps stateRef =
+    FeeIndexerDeps
+        { fidStore = mockIOStore stateRef
+        , fidObserveTip = \slot ->
+            modifyIORef'
+                stateRef
+                (\s -> s{ioObservedTips = ioObservedTips s <> [slot]})
+        }
+
+mockIOStore :: IORef IOIndexerState -> Store IO
+mockIOStore stateRef =
+    StoreWithFilters
+        { storePutEntry = \_ -> pure ()
+        , storeLookupEntry = \_ -> pure Nothing
+        , storeListEntries = pure []
+        , storeCollectWitnesses = \_ _ -> pure ()
+        , storePutReceipt = \_ _ -> pure ()
+        , storeLookupReceipt = \_ -> pure Nothing
+        , storePutSignerFilter = \_ _ -> pure ()
+        , storeLookupSignerFilter = \_ -> pure Nothing
+        , storeUpsertFeePayment = \payment ->
+            modifyIORef'
+                stateRef
+                (\s -> s{ioPayments = ioPayments s <> [payment]})
+        , storeRollbackFeePaymentsFrom = \slot ->
+            modifyIORef'
+                stateRef
+                ( \s ->
+                    s
+                        { ioAttributedRollbacks =
+                            ioAttributedRollbacks s <> [slot]
+                        }
+                )
+        , storeAllowanceFor = \_ _ _ -> pure (FeeAllowance 0 0 False)
+        , storePutMalformedFeePayment = \payment ->
+            modifyIORef'
+                stateRef
+                (\s -> s{ioMalformed = ioMalformed s <> [payment]})
+        , storeMalformedFeePayment = \txIn ->
+            lookup txIn
+                . fmap
+                    ( \payment ->
+                        (malformedFeePaymentTxIn payment, payment)
+                    )
+                . ioMalformed
+                <$> readIORef stateRef
+        , storeRollbackMalformedFeePaymentsFrom = \slot ->
+            modifyIORef'
+                stateRef
+                ( \s ->
+                    s
+                        { ioMalformedRollbacks =
+                            ioMalformedRollbacks s <> [slot]
+                        }
+                )
+        }
+
+testConfig :: FilePath -> FeeIndexerConfig
+testConfig dir =
+    FeeIndexerConfig
+        { ficSocketPath = "node.socket"
+        , ficNetworkMagic = 42
+        , ficByronEpochSlots = 21_600
+        , ficFeeAddress = feeAddress
+        , ficCheckpointDir = dir
+        , ficRetryDelayMicros = 0
+        }
+
+emptyExtract :: fetched -> IO FeeIndexerBlock
+emptyExtract _ =
+    pure FeeIndexerBlock{fibSlot = SlotNo 0, fibTransactions = []}
+
+indexedBlock :: FeeIndexerBlock
+indexedBlock =
+    FeeIndexerBlock
+        { fibSlot = SlotNo 20
+        , fibTransactions = [taggedTx, malformedMetadataTx]
+        }
+
+fetchedAt :: HeaderPoint -> Word64 -> Fetched
+fetchedAt point tip =
+    Fetched
+        { fetchedPoint = point
+        , fetchedBlock = unsafeCoerce ()
+        , fetchedTip = Network.SlotNo tip
+        }
+
+headerPointAt :: Word64 -> HeaderPoint
+headerPointAt slot =
+    Network.BlockPoint
+        (Network.SlotNo slot)
+        (OneEraHash (SBS.toShort (BS.replicate 32 (fromIntegral slot))))
 
 emptyMockState :: MockState
 emptyMockState =
