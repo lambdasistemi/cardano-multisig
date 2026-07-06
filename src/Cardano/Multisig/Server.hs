@@ -38,12 +38,19 @@ import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Multisig.Chain
     ( ChainSource (..)
     , N2cConfig (..)
+    , PaymentReadResult (..)
     , chainSourceFromProvider
     , networkFromMagic
     , readPaymentConfirmation
     , withNodeProviderAndSubmitter
     )
 import Cardano.Multisig.Filter qualified as Filter
+import Cardano.Multisig.Liveness
+    ( EntryLiveness (..)
+    , LivenessDeps (..)
+    , entryLiveness
+    , runLivenessMonitor
+    )
 import Cardano.Multisig.Publish
     ( FeeQuote (..)
     , OperatorSchedule (..)
@@ -85,6 +92,7 @@ import Cardano.Tx.Validate.Cli
     , verdictStatus
     )
 import Codec.Binary.Bech32 qualified as Bech32
+import Control.Concurrent.Async (withAsync)
 import Data.Aeson
     ( FromJSON (..)
     , Value
@@ -217,6 +225,7 @@ data ServerDeps m = ServerDeps
     { sdPublish :: PublishDeps m
     , sdSubmitTx :: ConwayTx -> m (Either Text ())
     , sdNow :: m UTCTime
+    , sdEntryLiveness :: Entry -> m EntryLiveness
     }
 
 applicationWith
@@ -239,7 +248,7 @@ applicationWith network schedule deps request respond =
         ("GET", ["v1", "entries"]) ->
             listEntriesHandler (sdPublish deps) request respond
         ("GET", ["v1", "entries", rawEntryId]) ->
-            readEntryHandler (sdPublish deps) rawEntryId request respond
+            readEntryHandler deps rawEntryId request respond
         ("PUT", ["v1", "signers", rawSigner, "filter"]) ->
             signerFilterHandler (sdPublish deps) rawSigner request respond
         ("POST", ["v1", "entries", rawEntryId, "witnesses"]) ->
@@ -381,9 +390,25 @@ entryJsonWithTx txHex entry@Entry{..} =
         , "status" .= renderEntryStatus (entryWitnessStatus entry)
         ]
 
-storedEntryJson :: Entry -> Value
-storedEntryJson entry =
-    entryJsonWithTx (txHexText (entryTx entry)) entry
+storedEntryJsonWithLiveness :: EntryLiveness -> Entry -> Value
+storedEntryJsonWithLiveness liveness entry =
+    object
+        [ "entry_id" .= renderEntryId (entryId entry)
+        , "transaction" .= txHexText (entryTx entry)
+        , "required_signers" .= renderKeyHashes (entryRequiredSigners entry)
+        , "witnesses" .= renderKeyHashes (entryWitnesses entry)
+        , "missing" .= renderKeyHashes (entryMissingSigners entry)
+        , "invalid_hereafter" .= renderSlot (entryInvalidHereafter entry)
+        , "status" .= renderEntryStatus (entryWitnessStatus entry)
+        , "liveness" .= entryLivenessJson liveness
+        ]
+
+entryLivenessJson :: EntryLiveness -> Value
+entryLivenessJson EntryLiveness{..} =
+    object
+        [ "inputs_unspent" .= elInputsUnspent
+        , "phase1_ok" .= elPhase1Ok
+        ]
 
 entrySummaryJson :: Entry -> Value
 entrySummaryJson entry@Entry{..} =
@@ -418,7 +443,7 @@ txHexText =
         . serialize' (eraProtVerLow @ConwayEra)
 
 readEntryHandler
-    :: PublishDeps IO
+    :: ServerDeps IO
     -> Text
     -> Application
 readEntryHandler deps rawEntryId _request respond =
@@ -426,12 +451,17 @@ readEntryHandler deps rawEntryId _request respond =
         Left _ ->
             respond entryNotFound
         Right entryId -> do
-            found <- storeLookupEntry (pdStore deps) entryId
-            respond $ case found of
+            found <- storeLookupEntry store entryId
+            case found of
                 Nothing ->
-                    entryNotFound
-                Just entry ->
-                    jsonResponse status200 (storedEntryJson entry)
+                    respond entryNotFound
+                Just entry -> do
+                    liveness <- sdEntryLiveness deps entry
+                    respond
+                        $ jsonResponse status200
+                        $ storedEntryJsonWithLiveness liveness entry
+  where
+    store = pdStore (sdPublish deps)
 
 listEntriesHandler
     :: PublishDeps IO
@@ -819,16 +849,44 @@ runServer port network = do
                         { sdPublish = publishDeps
                         , sdSubmitTx = submitWith submitter
                         , sdNow = getCurrentTime
+                        , sdEntryLiveness = entryLiveness livenessDeps
                         }
-            run port
-                $ cors (const $ Just policy)
-                $ applicationWith network (rcSchedule cfg) deps
+                livenessDeps =
+                    LivenessDeps
+                        { ldReadTip =
+                            ledgerTipSlot <$> queryLedgerSnapshot provider
+                        , ldInputUnspent = inputUnspent provider
+                        , ldPhase1Ok = phase1Ok chainSource
+                        , ldStore = store
+                        }
+            withAsync
+                (runLivenessMonitor defaultLivenessIntervalMicros livenessDeps)
+                $ \_ ->
+                    run port
+                        $ cors (const $ Just policy)
+                        $ applicationWith network (rcSchedule cfg) deps
   where
     policy =
         simpleCorsResourcePolicy
             { corsMethods = ["GET", "POST", "PUT", "OPTIONS"]
             , corsRequestHeaders = ["Content-Type"]
             }
+
+defaultLivenessIntervalMicros :: Int
+defaultLivenessIntervalMicros =
+    30 * 1_000_000
+
+inputUnspent :: Provider IO -> TxIn -> IO Bool
+inputUnspent provider txIn =
+    readPaymentConfirmation provider txIn >>= \case
+        PaymentReadResolved{} -> pure True
+        PaymentReadMissing{} -> pure False
+
+phase1Ok :: ChainSource -> ConwayTx -> IO Bool
+phase1Ok chainSource tx =
+    preflightResult chainSource tx >>= \case
+        PreflightAccepted -> pure True
+        PreflightRejected{} -> pure False
 
 preflightResult :: ChainSource -> ConwayTx -> IO PreflightResult
 preflightResult chainSource tx = do

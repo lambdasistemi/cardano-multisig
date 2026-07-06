@@ -77,6 +77,7 @@ import Cardano.Multisig.Filter
     ( FilterPolicy (..)
     , canonicalFilterPolicyBytes
     )
+import Cardano.Multisig.Liveness (EntryLiveness (..))
 import Cardano.Multisig.Publish
     ( OperatorSchedule (..)
     , PreflightResult (..)
@@ -343,7 +344,59 @@ spec = do
                         , "missing" .= renderKeyHashes (Set.singleton (signerHash 2))
                         , "invalid_hereafter" .= (125 :: Word64)
                         , "status" .= ("collecting" :: Text)
+                        , "liveness" .= entryLivenessJson liveLiveness
                         ]
+
+        it
+            "returns stale liveness from the injected read dependency"
+            $ do
+                let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                    entry = readyEntry tx
+                    deps =
+                        happyDeps
+                            { mdEntries =
+                                Map.singleton (entryIdFromTx tx) entry
+                            , mdLiveness = staleLiveness
+                            }
+                body <-
+                    getJson
+                        (entryPath (entryIdFromTx tx))
+                        deps
+                body
+                    `shouldBe` object
+                        [ "entry_id" .= renderEntryId (entryIdFromTx tx)
+                        , "transaction" .= txHexText tx
+                        , "required_signers" .= renderKeyHashes requiredSigners
+                        , "witnesses" .= renderKeyHashes requiredSigners
+                        , "missing" .= ([] :: [Text])
+                        , "invalid_hereafter" .= (125 :: Word64)
+                        , "status" .= ("ready" :: Text)
+                        , "liveness" .= entryLivenessJson staleLiveness
+                        ]
+
+        it "renders expired status on a persisted expired entry" $ do
+            let tx = testTx (SJust (SlotNo 125)) requiredSigners
+                entry = (storedEntry tx){entryStatus = EntryExpired}
+                deps =
+                    happyDeps
+                        { mdEntries =
+                            Map.singleton (entryIdFromTx tx) entry
+                        }
+            body <-
+                getJson
+                    (entryPath (entryIdFromTx tx))
+                    deps
+            body
+                `shouldBe` object
+                    [ "entry_id" .= renderEntryId (entryIdFromTx tx)
+                    , "transaction" .= txHexText tx
+                    , "required_signers" .= renderKeyHashes requiredSigners
+                    , "witnesses" .= ([] :: [Text])
+                    , "missing" .= renderKeyHashes requiredSigners
+                    , "invalid_hereafter" .= (125 :: Word64)
+                    , "status" .= ("expired" :: Text)
+                    , "liveness" .= entryLivenessJson liveLiveness
+                    ]
 
         it "returns 404 for an absent entry" $ do
             let tx = testTx (SJust (SlotNo 125)) requiredSigners
@@ -613,6 +666,7 @@ spec = do
                         , "missing" .= ([] :: [Text])
                         , "invalid_hereafter" .= (125 :: Word64)
                         , "status" .= ("submitted" :: Text)
+                        , "liveness" .= entryLivenessJson liveLiveness
                         ]
 
         it "returns a persisted receipt after submit" $ do
@@ -648,6 +702,7 @@ data MockDeps = MockDeps
     , mdSubmitResult :: Either Text ()
     , mdSubmitted :: [ConwayTx]
     , mdNow :: UTCTime
+    , mdLiveness :: EntryLiveness
     }
 
 happyDeps :: MockDeps
@@ -664,6 +719,7 @@ happyDeps =
             , mdSubmitResult = Right ()
             , mdSubmitted = mempty
             , mdNow = receiptTime
+            , mdLiveness = liveLiveness
             }
 
 getJson :: ByteString -> MockDeps -> IO Value
@@ -745,6 +801,7 @@ mockServerDeps ref =
                     )
                 )
         , sdNow = mdNow <$> readIORef ref
+        , sdEntryLiveness = \_ -> mdLiveness <$> readIORef ref
         }
 
 mockPublishDeps :: IORef MockDeps -> PublishDeps IO
@@ -867,6 +924,27 @@ receiptJson Receipt{..} =
     object
         [ "tx_id" .= renderEntryId receiptTxId
         , "submitted_at" .= receiptSubmittedAt
+        ]
+
+liveLiveness :: EntryLiveness
+liveLiveness =
+    EntryLiveness
+        { elInputsUnspent = True
+        , elPhase1Ok = True
+        }
+
+staleLiveness :: EntryLiveness
+staleLiveness =
+    EntryLiveness
+        { elInputsUnspent = False
+        , elPhase1Ok = False
+        }
+
+entryLivenessJson :: EntryLiveness -> Value
+entryLivenessJson EntryLiveness{..} =
+    object
+        [ "inputs_unspent" .= elInputsUnspent
+        , "phase1_ok" .= elPhase1Ok
         ]
 
 payment
